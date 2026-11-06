@@ -68,6 +68,74 @@
       { id: 'sess-2', position: 'HR Business Partner', date: '2026-11-04', avgScore: 3.8, questionCount: 5, competencies: ['Conflict Resolution', 'Leadership Coaching'], companyValues: ['Integrity', 'People-First'] }
     ];
 
+    // Varied Question Bank for 100% Unique Questions during Offline Fallback
+    const FALLBACK_BANK = {
+      en: {
+        General: [
+          "Walk me through your background and what motivated you to pursue this position.",
+          "What core strengths distinguish your work style from other candidates in this role?",
+          "How do you stay updated with industry developments and continuously refine your skills?"
+        ],
+        Technical: [
+          "Explain a complex technical issue you encountered recently and your step-by-step resolution strategy.",
+          "How do you ensure quality, maintainability, and scalability when designing core processes?",
+          "Describe your experience with domain-specific toolings, optimization methods, and performance profiling."
+        ],
+        Behavioral: [
+          "Describe a situation where you had a major disagreement with a team member. How was it resolved?",
+          "Give an example of a project that failed or missed its target. What did you learn and adjust?",
+          "Tell me about a time you had to deliver high-quality output under extreme time pressure."
+        ],
+        Situational: [
+          "If project requirements change abruptly halfway through execution, how do you adjust priorities?",
+          "How would you handle a scenario where a key stakeholder requests an unrealistic deadline?",
+          "Suppose you notice a critical oversight made by a senior colleague. What immediate action do you take?"
+        ],
+        Competency: [
+          "Demonstrate your methodology for breaking down a complex, ambiguous problem into actionable tasks.",
+          "How do you measure efficiency and key performance indicators in your daily operations?",
+          "Explain how you balance speed of delivery with long-term quality and operational compliance."
+        ],
+        Leadership: [
+          "Describe your approach to mentoring junior team members and fostering accountability.",
+          "How do you align cross-functional team objectives with broader organizational strategy?",
+          "Tell me about a time you had to influence senior decision-makers without direct formal authority."
+        ]
+      },
+      id: {
+        General: [
+          "Ceritakan latar belakang Anda dan motivasi utama Anda melamar posisi ini.",
+          "Kekuatan utama apa yang membedakan gaya kerja Anda dibanding kandidat lainnya?",
+          "Bagaimana cara Anda memperbarui pengetahuan dan meningkatkan keterampilan secara berkelanjutan?"
+        ],
+        Technical: [
+          "Jelaskan kendala teknis rumit yang pernah Anda hadapi serta alur penyelesaiannya secara berurutan.",
+          "Bagaimana strategi Anda memastikan kualitas, skalabilitas, dan efisiensi dalam perancangan proses?",
+          "Deskripsikan pengalaman Anda dalam mengoptimalkan alat kerja spesifik serta evaluasi performa."
+        ],
+        Behavioral: [
+          "Ceritakan situasi saat Anda mengalami perbedaan pendapat secara signifikan dengan rekan tim. Bagaimana Anda menyelesaikannya?",
+          "Berikan contoh proyek yang tidak mencapai target. Pelajaran apa yang Anda ambil dan perbaiki?",
+          "Ceritakan pengalamaan saat Anda dituntut memberikan hasil terbaik di bawah tekanan tenggat waktu yang sangat ketat."
+        ],
+        Situational: [
+          "Jika persyaratan proyek berubah drastis di tengah jalan, bagaimana Anda menyesuaikan skala prioritas?",
+          "Bagaimana sikap Anda menghadapi pemangku kepentingan yang menuntut tenggat waktu tidak realistis?",
+          "Bagaimana tindakan Anda jika menemukan kekeliruan krusial yang dilakukan rekan kerja?"
+        ],
+        Competency: [
+          "Tunjukkan metode Anda dalam memecahkan masalah yang rumit dan ambigu menjadi langkah-langkah terstruktur.",
+          "Bagaimana Anda mengukur efisiensi dan indikator kinerja utama (KPI) dalam operasional harian?",
+          "Jelaskan bagaimana Anda menyeimbangkan kecepatan eksekusi dengan kepatuhan standar kualitas jangka panjang."
+        ],
+        Leadership: [
+          "Jelaskan pendekatan Anda dalam membimbing anggota tim serta membangun rasa tanggung jawab.",
+          "Bagaimana cara Anda menyelaraskan target tim lintas fungsi dengan strategi besar organisasi?",
+          "Ceritakan pengalaman Anda dalam memengaruhi keputusan pemangku kepentingan tanpa memiliki otoritas formal."
+        ]
+      }
+    };
+
     function App() {
       const [activeTab, setActiveTab] = useState('dashboard');
       const [outputLang, setOutputLang] = useState('en'); // 'en' | 'id'
@@ -114,7 +182,7 @@
       const [reviewingIndex, setReviewingIndex] = useState(null);
       const [isGenerating, setIsGenerating] = useState(false);
 
-      // Total composition count (10 max)
+      // Composition count max cap (10 max)
       const totalQuestionsCount = useMemo(() => {
         return Object.values(config.composition).reduce((a, b) => a + Number(b), 0);
       }, [config.composition]);
@@ -130,10 +198,10 @@
         const positionsList = Array.from(new Set(savedSessions.map(s => s.position)));
 
         const competenciesSet = new Set();
-        savedSessions.forEach(s => (s.competencies || ['Technical Depth', 'STAR Method', 'Problem Solving']).forEach(c => competenciesSet.add(c)));
+        savedSessions.forEach(s => (s.competencies || ['Technical Depth', 'STAR Execution', 'Problem Solving']).forEach(c => competenciesSet.add(c)));
 
         const valuesSet = new Set();
-        savedSessions.forEach(s => (s.companyValues || ['Execution Excellence', 'Integrity', 'Team Collaboration']).forEach(v => valuesSet.add(v)));
+        savedSessions.forEach(s => (s.companyValues || ['Execution Excellence', 'Integrity', 'Team Alignment']).forEach(v => valuesSet.add(v)));
 
         return {
           totalInterviewed,
@@ -213,7 +281,7 @@
 
         if (apiKey) {
           try {
-            const prompt = `Generate 1 alternative ${qToReplace.category} interview question in ${targetLangStr} for a ${generatedKit.seniority} level ${generatedKit.position}.
+            const prompt = `Generate 1 alternative ${qToReplace.category} interview question in ${targetLangStr} for a ${generatedKit.seniority} level ${generatedKit.position}. Ensure it is completely distinct from previous questions.
 Return ONLY valid JSON:
 {
   "category": "${qToReplace.category}",
@@ -362,7 +430,6 @@ Analyze the notes in ${targetLangStr}. Return ONLY valid JSON:
         return { avgScore: avg, count: scores.length, recommendation };
       }, [candidateScores, outputLang]);
 
-      // Save evaluation session to dashboard analytics
       const handleSaveSessionToDashboard = () => {
         if (!generatedKit) return;
         const newSession = {
@@ -386,7 +453,6 @@ Analyze the notes in ${targetLangStr}. Return ONLY valid JSON:
         setCandidateNotes({});
         setAiAnswerReviews({});
 
-        // Custom position resolution logic
         const targetPosition = (config.department === 'Other / Custom' || config.position === 'Custom Position') 
           ? (config.customPosition || 'Custom Position') 
           : config.position;
@@ -402,8 +468,10 @@ Analyze the notes in ${targetLangStr}. Return ONLY valid JSON:
           try {
             setApiStatusMessage('Connecting to Gemini 2.5 Flash...');
             const prompt = `Generate a structured interview question kit strictly in ${targetLangStr} for a ${config.seniority} level ${targetPosition} in ${config.department}.
-Composition: ${compositionText} (Total ${totalQuestionsCount} questions, max 10).
+Composition requirement: ${compositionText} (Total ${totalQuestionsCount} questions, max 10).
 Context: ${config.additionalContext}
+
+CRITICAL: EVERY SINGLE QUESTION MUST BE DISTINCT, UNIQUE, AND SPECIFIC TO THE ROLE. AVOID REPETITIVE OR GENERIC TEMPLATES.
 
 Return ONLY valid JSON in ${targetLangStr} matching:
 {
@@ -411,7 +479,7 @@ Return ONLY valid JSON in ${targetLangStr} matching:
     {
       "id": "q1",
       "category": "Technical",
-      "question": "Question text in ${targetLangStr}",
+      "question": "Unique question text in ${targetLangStr}",
       "purpose": "Purpose in ${targetLangStr}",
       "greenFlags": ["Indicator 1", "Indicator 2"],
       "redFlags": ["Warning sign 1", "Warning sign 2"],
@@ -449,31 +517,37 @@ Return ONLY valid JSON in ${targetLangStr} matching:
             return;
           } catch (err) {
             console.warn("AI Generation fallback triggered due to error:", err);
-            setApiStatusMessage('API Error: Switched to offline generator fallback');
+            setApiStatusMessage('API Error: Switched to offline unique question fallback');
           }
         } else {
-          setApiStatusMessage('No API Key: Using offline generator fallback');
+          setApiStatusMessage('No API Key: Using offline unique question bank');
         }
 
-        // Offline Fallback Generator
+        // Offline Unique Question Generator (Pulls from FALLBACK_BANK so no questions repeat)
         setTimeout(() => {
           const generatedQuestions = [];
+          const langBank = FALLBACK_BANK[outputLang] || FALLBACK_BANK.en;
+
           Object.entries(config.composition).forEach(([type, count]) => {
+            const availableList = langBank[type] || langBank.General;
             for (let i = 0; i < count; i++) {
               if (generatedQuestions.length >= 10) break;
+              const qText = availableList[i % availableList.length];
               generatedQuestions.push({
-                id: `q-${type}-${i+1}`,
+                id: `q-${type}-${i+1}-${Date.now()}`,
                 category: type,
-                question: outputLang === 'id' 
-                  ? `[${type}] Jelaskan pengalaman Anda sebagai ${config.seniority} ${targetPosition} terkait tantangan utama dalam bidang ini.`
-                  : `[${type}] Describe your experience as a ${config.seniority} ${targetPosition} regarding key operational challenges.`,
-                purpose: outputLang === 'id' ? `Menilai kompetensi ${type} untuk posisi ${targetPosition}.` : `Evaluates ${type} competencies for ${targetPosition}.`,
-                greenFlags: outputLang === 'id' ? ['Menggunakan metode STAR dengan detail', 'Memberikan contoh angka/metrik hasil'] : ['Uses STAR method with specific details', 'Provides quantified metric results'],
-                redFlags: outputLang === 'id' ? ['Jawaban terlalu umum tanpa bukti', 'Menyalahkan tim atas kegagalan'] : ['Generic answers without concrete evidence', 'Blames team members for failures'],
+                question: `${qText} (Role: ${config.seniority} ${targetPosition})`,
+                purpose: outputLang === 'id' ? `Menilai kompetensi ${type} spesifik untuk ${targetPosition}.` : `Evaluates specific ${type} competencies for ${targetPosition}.`,
+                greenFlags: outputLang === 'id' 
+                  ? ['Menggunakan metode STAR dengan detail konkret', 'Menjelaskan dampak bisnis dan metrik hasil'] 
+                  : ['Uses STAR method with specific concrete details', 'Explains business impact and metric outcomes'],
+                redFlags: outputLang === 'id' 
+                  ? ['Jawaban umum tanpa contoh konkret', 'Menghindari tanggung jawab pribadi'] 
+                  : ['Generic response with no concrete examples', 'Avoids taking personal accountability'],
                 rubricMatrix: {
-                  1: outputLang === 'id' ? 'Jawaban kabur tanpa penjelasan konkret.' : 'Vague answer with no concrete evidence.',
-                  3: outputLang === 'id' ? 'Memenuhi standar dasar dengan alur yang jelas.' : 'Meets baseline standards with clear methodology.',
-                  5: outputLang === 'id' ? 'Luar biasa dengan dampak bisnis terukur.' : 'Exceptional answer with clear ROI and impact.'
+                  1: outputLang === 'id' ? 'Jawaban kabur tanpa bukti penjelasan terstruktur.' : 'Vague answer with no structured evidence.',
+                  3: outputLang === 'id' ? 'Memenuhi standar dasar dengan metodologi jelas.' : 'Meets baseline standards with clear methodology.',
+                  5: outputLang === 'id' ? 'Luar biasa dengan penjelasan dampak bisnis terukur.' : 'Exceptional answer with clear ROI and impact.'
                 }
               });
             }
@@ -531,7 +605,7 @@ Return ONLY valid JSON in ${targetLangStr} matching:
             {/* Main Workspace */}
             <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8">
 
-              {/* DASHBOARD TAB (Informative SaaS Hub with Detailed Analytics) */}
+              {/* DASHBOARD TAB */}
               {activeTab === 'dashboard' && (
                 <div className="space-y-8">
                   {/* Hero Banner */}
@@ -570,7 +644,7 @@ Return ONLY valid JSON in ${targetLangStr} matching:
                     </div>
                   </div>
 
-                  {/* Informative Breakdown Sections: Competencies, Company Values, and Positions */}
+                  {/* Informative Breakdown Sections */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {/* Positions Breakdown */}
                     <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-3">
@@ -655,7 +729,7 @@ Return ONLY valid JSON in ${targetLangStr} matching:
                       </select>
                     </div>
 
-                    {/* Restored Custom Position Text Input Field */}
+                    {/* Custom Position Text Input Field */}
                     {(config.department === 'Other / Custom' || config.position === 'Custom Position') && (
                       <div className="bg-indigo-50/60 p-4 rounded-2xl border border-indigo-100 space-y-2">
                         <label className="block text-xs font-bold text-indigo-900">Specify Custom Job Title</label>

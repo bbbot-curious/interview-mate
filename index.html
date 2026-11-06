@@ -51,10 +51,10 @@
     const SENIORITY_LEVELS = ['Internship', 'Entry Level', 'Junior', 'Mid-Level', 'Senior', 'Manager', 'Director / Executive'];
 
     const SCRUTINY_LEVELS = [
-      { id: 'lenient', title: 'Lenient / Encouraging', desc: 'Generous scoring (3-5). Gives benefit of the doubt for junior roles.' },
-      { id: 'balanced', title: 'Balanced (Standard Corp)', desc: 'Standard corporate evaluation. Requires clear STAR examples for 4+.' },
+      { id: 'lenient', title: 'Lenient / Encouraging', desc: 'Generous scoring (3-5). Gives benefit of the doubt for junior roles or basic intent.' },
+      { id: 'balanced', title: 'Balanced (Standard Corp)', desc: 'Standard corporate evaluation. Requires clear STAR methodology for 4+.' },
       { id: 'strict', title: 'Strict (High-Bar Senior)', desc: 'High expectations. Caps vague or unquantified answers at 2 or 3.' },
-      { id: 'ruthless', title: 'Ruthless (Bar Raiser)', desc: 'Extremely rigorous. Scores 4 and 5 reserved strictly for top candidates.' }
+      { id: 'ruthless', title: 'Ruthless (Bar Raiser)', desc: 'Extremely rigorous. Penalizes fluff heavily; 4-5 stars require hard numbers & zero gaps.' }
     ];
 
     const DEFAULT_PRESETS = [
@@ -68,70 +68,70 @@
       { id: 'sess-2', position: 'HR Business Partner', date: '2026-11-04', avgScore: 3.8, questionCount: 5, competencies: ['Conflict Resolution', 'Leadership Coaching'], companyValues: ['Integrity', 'People-First'] }
     ];
 
-    // Varied Question Bank for 100% Unique Questions during Offline Fallback
+    // Unique Question Bank for 100% Non-Repetitive Questions in Offline Fallback
     const FALLBACK_BANK = {
       en: {
         General: [
-          "Walk me through your background and what motivated you to pursue this position.",
-          "What core strengths distinguish your work style from other candidates in this role?",
-          "How do you stay updated with industry developments and continuously refine your skills?"
+          "Walk me through your professional journey and what specifically motivated you to apply for this position.",
+          "What core professional strengths distinguish your execution style from other candidates in this domain?",
+          "How do you stay current with industry trends and systematically refine your skill set?"
         ],
         Technical: [
-          "Explain a complex technical issue you encountered recently and your step-by-step resolution strategy.",
-          "How do you ensure quality, maintainability, and scalability when designing core processes?",
-          "Describe your experience with domain-specific toolings, optimization methods, and performance profiling."
+          "Explain a complex technical or domain challenge you encountered recently and detail your step-by-step resolution strategy.",
+          "How do you guarantee quality, maintainability, and scalability when architecting core deliverables?",
+          "Describe your experience with domain-specific tools, optimization methods, and performance profiling."
         ],
         Behavioral: [
-          "Describe a situation where you had a major disagreement with a team member. How was it resolved?",
-          "Give an example of a project that failed or missed its target. What did you learn and adjust?",
-          "Tell me about a time you had to deliver high-quality output under extreme time pressure."
+          "Describe a situation where you had a major professional disagreement with a key team member. How was it resolved?",
+          "Give an example of a project that missed its target or failed. What specific adjustments did you make afterward?",
+          "Tell me about a time you had to deliver high-stakes results under extreme time or resource constraints."
         ],
         Situational: [
-          "If project requirements change abruptly halfway through execution, how do you adjust priorities?",
-          "How would you handle a scenario where a key stakeholder requests an unrealistic deadline?",
-          "Suppose you notice a critical oversight made by a senior colleague. What immediate action do you take?"
+          "If core project requirements change unexpectedly midway through execution, how do you re-evaluate priorities?",
+          "How would you handle a situation where a key executive stakeholder demands an unrealistic delivery deadline?",
+          "Suppose you discover a critical operational flaw made by a colleague. What immediate steps do you take?"
         ],
         Competency: [
-          "Demonstrate your methodology for breaking down a complex, ambiguous problem into actionable tasks.",
-          "How do you measure efficiency and key performance indicators in your daily operations?",
-          "Explain how you balance speed of delivery with long-term quality and operational compliance."
+          "Demonstrate your methodology for breaking down a vague, high-ambiguity problem into actionable milestones.",
+          "How do you measure efficiency and track key performance indicators (KPIs) in your daily operations?",
+          "Explain how you strike a balance between speed of execution and long-term operational quality."
         ],
         Leadership: [
-          "Describe your approach to mentoring junior team members and fostering accountability.",
-          "How do you align cross-functional team objectives with broader organizational strategy?",
-          "Tell me about a time you had to influence senior decision-makers without direct formal authority."
+          "Describe your approach to mentoring team members and cultivating individual accountability.",
+          "How do you align cross-functional team objectives with overall business strategy?",
+          "Tell me about a time you had to influence senior decision-makers without having direct formal authority."
         ]
       },
       id: {
         General: [
-          "Ceritakan latar belakang Anda dan motivasi utama Anda melamar posisi ini.",
-          "Kekuatan utama apa yang membedakan gaya kerja Anda dibanding kandidat lainnya?",
-          "Bagaimana cara Anda memperbarui pengetahuan dan meningkatkan keterampilan secara berkelanjutan?"
+          "Ceritakan perjalanan profesional Anda dan motivasi utama Anda melamar posisi spesifik ini.",
+          "Kekuatan utama apa yang membedakan gaya eksekusi Anda dibanding kandidat lainnya di bidang ini?",
+          "Bagaimana cara Anda memperbarui wawasan industri dan meningkatkan keterampilan secara berkelanjutan?"
         ],
         Technical: [
-          "Jelaskan kendala teknis rumit yang pernah Anda hadapi serta alur penyelesaiannya secara berurutan.",
-          "Bagaimana strategi Anda memastikan kualitas, skalabilitas, dan efisiensi dalam perancangan proses?",
-          "Deskripsikan pengalaman Anda dalam mengoptimalkan alat kerja spesifik serta evaluasi performa."
+          "Jelaskan kendala teknis atau domain rumit yang Anda hadapi baru-baru ini serta alur penyelesaiannya.",
+          "Bagaimana strategi Anda memastikan kualitas, skalabilitas, dan efisiensi dalam perancangan sistem?",
+          "Deskripsikan pengalaman Anda dalam mengoptimalkan perangkat kerja spesifik serta analisis kinerja."
         ],
         Behavioral: [
-          "Ceritakan situasi saat Anda mengalami perbedaan pendapat secara signifikan dengan rekan tim. Bagaimana Anda menyelesaikannya?",
-          "Berikan contoh proyek yang tidak mencapai target. Pelajaran apa yang Anda ambil dan perbaiki?",
-          "Ceritakan pengalamaan saat Anda dituntut memberikan hasil terbaik di bawah tekanan tenggat waktu yang sangat ketat."
+          "Ceritakan situasi saat Anda mengalami perbedaan pendapat signifikan dengan rekan tim. Bagaimana Anda menyelesaikannya?",
+          "Berikan contoh proyek yang tidak mencapai target. Pelajaran konkret apa yang Anda ambil dan terapkan?",
+          "Ceritakan pengalaman saat Anda dituntut memberikan hasil terbaik di bawah tekanan tenggat waktu yang ketat."
         ],
         Situational: [
-          "Jika persyaratan proyek berubah drastis di tengah jalan, bagaimana Anda menyesuaikan skala prioritas?",
+          "Jika alur atau persyaratan proyek berubah mendadak di tengah jalan, bagaimana Anda menyesuaikan prioritas?",
           "Bagaimana sikap Anda menghadapi pemangku kepentingan yang menuntut tenggat waktu tidak realistis?",
-          "Bagaimana tindakan Anda jika menemukan kekeliruan krusial yang dilakukan rekan kerja?"
+          "Bagaimana tindakan Anda jika menemukan kekeliruan operasional krusial yang dilakukan rekan tim?"
         ],
         Competency: [
-          "Tunjukkan metode Anda dalam memecahkan masalah yang rumit dan ambigu menjadi langkah-langkah terstruktur.",
+          "Tunjukkan metode Anda dalam memecahkan masalah ambigu menjadi langkah-langkah kerja terstruktur.",
           "Bagaimana Anda mengukur efisiensi dan indikator kinerja utama (KPI) dalam operasional harian?",
-          "Jelaskan bagaimana Anda menyeimbangkan kecepatan eksekusi dengan kepatuhan standar kualitas jangka panjang."
+          "Jelaskan bagaimana Anda menyeimbangkan kecepatan eksekusi dengan standar kualitas jangka panjang."
         ],
         Leadership: [
-          "Jelaskan pendekatan Anda dalam membimbing anggota tim serta membangun rasa tanggung jawab.",
-          "Bagaimana cara Anda menyelaraskan target tim lintas fungsi dengan strategi besar organisasi?",
-          "Ceritakan pengalaman Anda dalam memengaruhi keputusan pemangku kepentingan tanpa memiliki otoritas formal."
+          "Jelaskan pendekatan Anda dalam membimbing anggota tim serta membangun rasa tanggung jawab individual.",
+          "Bagaimana cara Anda menyelaraskan target tim lintas fungsi dengan strategi besar perusahaan?",
+          "Ceritakan pengalaman Anda dalam memengaruhi keputusan pemangku kepentingan tanpa otoritas formal."
         ]
       }
     };
@@ -182,7 +182,7 @@
       const [reviewingIndex, setReviewingIndex] = useState(null);
       const [isGenerating, setIsGenerating] = useState(false);
 
-      // Composition count max cap (10 max)
+      // Total question count cap (10 max)
       const totalQuestionsCount = useMemo(() => {
         return Object.values(config.composition).reduce((a, b) => a + Number(b), 0);
       }, [config.composition]);
@@ -322,6 +322,7 @@ Return ONLY valid JSON:
         setGeneratedKit({ ...generatedKit, questions: updatedQuestions });
       };
 
+      // DYNAMIC FLEXIBLE AI ANSWER REVIEWER WITH SCRUTINY LEVEL ENFORCEMENT
       const handleReviewAnswerWithAI = async (qIndex) => {
         const note = candidateNotes[qIndex];
         if (!note || !note.trim()) return;
@@ -330,20 +331,41 @@ Return ONLY valid JSON:
         const questionObj = generatedKit.questions[qIndex];
         const targetLangStr = outputLang === 'id' ? 'Bahasa Indonesia' : 'English';
 
+        // Directives per Scrutiny Tier
+        const scrutinyDirectives = {
+          lenient: "Lenient/Encouraging Tier: Be generous. Give benefit of the doubt. Award 4 or 5 easily if core intent or effort is present. Do not deduct points for minor gaps.",
+          balanced: "Balanced Standard Tier: Standard corporate evaluation. Require clear STAR methodology (Situation, Task, Action, Result) to give 4+ stars.",
+          strict: "Strict Senior Tier: High bar expectations. Cap unquantified, vague, or fluffy answers at score 2 or 3. Require concrete metrics for 4+.",
+          ruthless: "Ruthless Bar-Raiser Tier: Extreme rigor. Heavily penalize fluff, buzzwords, or lack of quantitative proof. Reserve 4 and 5 ONLY for exceptional, flaw-free answers with hard numbers."
+        };
+
+        const selectedDirective = scrutinyDirectives[scrutinyMode] || scrutinyDirectives.balanced;
+
         if (apiKey) {
           try {
-            const prompt = `You are an executive interviewer with Scrutiny Level: ${scrutinyMode}.
-Question: "${questionObj.question}"
-Candidate Transcript Notes: "${note}"
-Rubrics: Score 1: ${questionObj.rubricMatrix[1]}, Score 3: ${questionObj.rubricMatrix[3]}, Score 5: ${questionObj.rubricMatrix[5]}
+            const prompt = `You are an executive interviewer conducting candidate evaluation.
+ACTIVE EVALUATION SCRUTINY MODE: ${scrutinyMode.toUpperCase()}
+SCRUTINY DIRECTIVE: ${selectedDirective}
 
-Analyze the notes in ${targetLangStr}. Return ONLY valid JSON:
+Question Asked: "${questionObj.question}"
+Candidate Response Transcript/Notes: "${note}"
+
+Rubric Guidelines:
+- Score 1 (Poor): ${questionObj.rubricMatrix[1]}
+- Score 3 (Meets): ${questionObj.rubricMatrix[3]}
+- Score 5 (Excellent): ${questionObj.rubricMatrix[5]}
+Green Flags (Positive Indicators): ${questionObj.greenFlags?.join(', ')}
+Red Flags (Warning Indicators): ${questionObj.redFlags?.join(', ')}
+
+Strictly adhere to the ${scrutinyMode.toUpperCase()} scrutiny directive when scoring.
+Return ONLY valid JSON in ${targetLangStr} matching:
 {
   "suggestedScore": 3,
   "strengthsFound": ["Strength 1", "Strength 2"],
   "gapsFound": ["Gap 1"],
-  "suggestedFollowUp": "Follow-up question"
+  "suggestedFollowUp": "Targeted follow-up question probing identified gaps"
 }`;
+
             const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -360,21 +382,57 @@ Analyze the notes in ${targetLangStr}. Return ONLY valid JSON:
             setReviewingIndex(null);
             return;
           } catch (err) {
-            console.warn("AI Review Fallback", err);
+            console.warn("Live AI Review Error, falling back to dynamic Scrutiny Engine", err);
           }
         }
 
+        // Offline Fallback Evaluation Engine with Dynamic Scrutiny Calibration
         setTimeout(() => {
+          let baseScore = Math.min(5, Math.max(1, Math.floor(note.length / 22)));
+          let strengths = outputLang === 'id' 
+            ? ['Menunjukkan pemahaman dasar terhadap topik', 'Menyampaikan penjelasan secara terstruktur'] 
+            : ['Demonstrates fundamental domain understanding', 'Delivers response in a structured manner'];
+          let gaps = [];
+
+          const hasNumbers = /\d+/.test(note) || note.includes('%') || note.includes('$');
+
+          if (scrutinyMode === 'lenient') {
+            baseScore = Math.min(5, baseScore + 1);
+            gaps = outputLang === 'id' 
+              ? ['Dapat memberikan rincian eksekusi yang lebih mendalam di proyek selanjutnya'] 
+              : ['Could provide slightly deeper execution details in future projects'];
+          } else if (scrutinyMode === 'balanced') {
+            if (!hasNumbers) {
+              gaps.push(outputLang === 'id' ? 'Dapat menambahkan metrik hasil bisnis terukur' : 'Could include specific quantified business metrics');
+            }
+          } else if (scrutinyMode === 'strict') {
+            if (!hasNumbers) {
+              baseScore = Math.min(3, baseScore); // Cap at 3 for missing metrics
+              gaps.push(outputLang === 'id' ? 'TIDAK ADA METRIK: Penjelasan kabur tanpa data kuantitatif terukur (dibatasi maks skor 3)' : 'LACKS METRICS: Unquantified response capped at max score 3 under Strict mode');
+            }
+            gaps.push(outputLang === 'id' ? 'Kurang penjelasan strategi mitigasi risiko edge-case' : 'Lacks deep risk mitigation & edge-case handling');
+          } else if (scrutinyMode === 'ruthless') {
+            baseScore = Math.max(1, baseScore - 1); // Penalize fluff
+            if (!hasNumbers) {
+              baseScore = Math.min(2, baseScore);
+              gaps.push(outputLang === 'id' ? 'BAR RAISER REJECTION: Nol data angka/metrik kuantitatif. Terlalu banyak klaim umum.' : 'BAR RAISER REJECTION: Zero numerical proof provided. Excessive unverified claims.');
+            } else {
+              gaps.push(outputLang === 'id' ? 'Penjelasan skala dampak bisnis belum optimal' : 'Scope of business impact could be more rigorously demonstrated');
+            }
+          }
+
           const mockResult = {
-            suggestedScore: Math.min(5, Math.max(2, Math.floor(note.length / 25))),
-            strengthsFound: outputLang === 'id' ? ['Menyebutkan konteks terstruktur', 'Menjelaskan alur tindakan'] : ['Mentions structured context', 'Explains action methodology'],
-            gapsFound: outputLang === 'id' ? ['Dapat menambahkan metrik hasil bisnis terukur'] : ['Could include more specific quantified business impact'],
-            suggestedFollowUp: outputLang === 'id' ? 'Apa metrik utama yang Anda gunakan untuk mengukur keberhasilan tersebut?' : 'What key metric did you use to measure that success?'
+            suggestedScore: baseScore,
+            strengthsFound: strengths,
+            gapsFound: gaps,
+            suggestedFollowUp: outputLang === 'id' 
+              ? `[Scrutiny Level: ${scrutinyMode.toUpperCase()}] Apa metrik kuantitatif terukur spesifik yang Anda gunakan untuk membuktikan keberhasilan eksekusi tersebut?` 
+              : `[Scrutiny Level: ${scrutinyMode.toUpperCase()}] What specific quantified metric did you track to prove the ROI of that action?`
           };
           setAiAnswerReviews(prev => ({ ...prev, [qIndex]: mockResult }));
           handleScoreChange(qIndex, mockResult.suggestedScore);
           setReviewingIndex(null);
-        }, 1000);
+        }, 800);
       };
 
       const handleCopyCheatsheet = () => {
@@ -523,7 +581,7 @@ Return ONLY valid JSON in ${targetLangStr} matching:
           setApiStatusMessage('No API Key: Using offline unique question bank');
         }
 
-        // Offline Unique Question Generator (Pulls from FALLBACK_BANK so no questions repeat)
+        // Offline Unique Question Generator
         setTimeout(() => {
           const generatedQuestions = [];
           const langBank = FALLBACK_BANK[outputLang] || FALLBACK_BANK.en;
@@ -941,7 +999,7 @@ Return ONLY valid JSON in ${targetLangStr} matching:
                 </div>
               )}
 
-              {/* LIVE INTERVIEW STUDIO WITH AI ANSWER EVALUATOR */}
+              {/* LIVE INTERVIEW STUDIO WITH DYNAMIC AI SCRUTINY REVIEWER */}
               {activeTab === 'live-interview' && (
                 <div className="space-y-6">
                   <div className="bg-white p-6 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-4">
@@ -951,11 +1009,20 @@ Return ONLY valid JSON in ${targetLangStr} matching:
                     </div>
 
                     <div className="flex items-center space-x-2">
-                      <span className="text-xs font-bold text-slate-500">AI Scrutiny Mode:</span>
-                      <select value={scrutinyMode} onChange={e => setScrutinyMode(e.target.value)} className="text-xs font-bold p-2 rounded-xl border border-slate-300 bg-slate-50">
+                      <span className="text-xs font-bold text-slate-700">AI Scrutiny Level:</span>
+                      <select value={scrutinyMode} onChange={e => setScrutinyMode(e.target.value)} className="text-xs font-bold p-2.5 rounded-xl border border-indigo-200 bg-indigo-50/70 text-indigo-900 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                         {SCRUTINY_LEVELS.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
                       </select>
                     </div>
+                  </div>
+
+                  {/* Scrutiny Level Explainer Banner */}
+                  <div className="bg-indigo-900 text-white p-4 rounded-2xl shadow-sm text-xs flex justify-between items-center">
+                    <div>
+                      <span className="font-extrabold uppercase tracking-wide text-indigo-300">Active Scrutiny Mode: {SCRUTINY_LEVELS.find(s => s.id === scrutinyMode)?.title}</span>
+                      <p className="text-slate-300 mt-0.5">{SCRUTINY_LEVELS.find(s => s.id === scrutinyMode)?.desc}</p>
+                    </div>
+                    <span className="text-lg">⚖️</span>
                   </div>
 
                   {generatedKit ? (
@@ -980,23 +1047,23 @@ Return ONLY valid JSON in ${targetLangStr} matching:
                           <div>
                             <div className="flex justify-between items-center mb-1">
                               <label className="block text-xs font-bold text-slate-700">Interviewer Notes & Answer Transcript:</label>
-                              <button onClick={() => handleReviewAnswerWithAI(idx)} disabled={reviewingIndex === idx} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 disabled:text-slate-400">
-                                {reviewingIndex === idx ? 'Evaluating...' : 'AI Review Answer'}
+                              <button onClick={() => handleReviewAnswerWithAI(idx)} disabled={reviewingIndex === idx} className="text-xs font-bold px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg transition disabled:text-slate-400">
+                                {reviewingIndex === idx ? 'Evaluating with AI...' : '🔍 Evaluate Answer with AI'}
                               </button>
                             </div>
-                            <textarea value={candidateNotes[idx] || ''} onChange={e => handleNoteChange(idx, e.target.value)} placeholder="Record candidate response notes here..." className="w-full p-3 text-xs border border-slate-200 rounded-xl bg-slate-50 h-24" />
+                            <textarea value={candidateNotes[idx] || ''} onChange={e => handleNoteChange(idx, e.target.value)} placeholder="Record candidate response notes or transcript here..." className="w-full p-3 text-xs border border-slate-200 rounded-xl bg-slate-50 h-24 focus:bg-white transition" />
                           </div>
 
                           {/* AI Answer Review Feedback Drawer */}
                           {aiAnswerReviews[idx] && (
-                            <div className="bg-indigo-50/70 border border-indigo-100 p-4 rounded-xl text-xs space-y-2">
-                              <div className="flex justify-between font-bold text-indigo-900">
-                                <span>AI Analysis Feedback</span>
-                                <span>Suggested Score: {aiAnswerReviews[idx].suggestedScore} / 5</span>
+                            <div className="bg-indigo-50/80 border border-indigo-200 p-4 rounded-xl text-xs space-y-2 shadow-inner">
+                              <div className="flex justify-between items-center font-bold text-indigo-950 border-b border-indigo-200/60 pb-2">
+                                <span>AI Evaluation Feedback ({scrutinyMode.toUpperCase()} Mode)</span>
+                                <span className="bg-indigo-600 text-white px-2.5 py-0.5 rounded-full text-xs font-extrabold">Suggested: {aiAnswerReviews[idx].suggestedScore} / 5</span>
                               </div>
-                              <p><strong>Strengths:</strong> {aiAnswerReviews[idx].strengthsFound?.join('; ')}</p>
-                              <p><strong>Gaps:</strong> {aiAnswerReviews[idx].gapsFound?.join('; ')}</p>
-                              {aiAnswerReviews[idx].suggestedFollowUp && <p className="text-indigo-700 italic"><strong>Follow-Up Question:</strong> {aiAnswerReviews[idx].suggestedFollowUp}</p>}
+                              <p><strong>Strengths Identified:</strong> {aiAnswerReviews[idx].strengthsFound?.join('; ')}</p>
+                              <p className="text-rose-900"><strong>Identified Gaps / Risks:</strong> {aiAnswerReviews[idx].gapsFound?.join('; ')}</p>
+                              {aiAnswerReviews[idx].suggestedFollowUp && <p className="text-indigo-800 italic bg-white p-2.5 rounded-lg border border-indigo-100 mt-1"><strong>Follow-Up Question:</strong> {aiAnswerReviews[idx].suggestedFollowUp}</p>}
                             </div>
                           )}
                         </div>

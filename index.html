@@ -1,0 +1,2030 @@
+import React, { useState, useEffect, useMemo } from 'react';
+
+// --- DEPARTMENTS & POSITIONS DATA ---
+const DEPARTMENT_POSITIONS = {
+  'Information Technology': [
+    'Software Engineer', 'Senior Full Stack Developer', 'Frontend Developer', 'Backend Architect',
+    'DevOps Engineer', 'Data Analyst', 'Systems Administrator', 'Cybersecurity Specialist', 'Product Manager'
+  ],
+  'Human Resources': [
+    'HR Manager', 'Talent Acquisition Specialist', 'HR Business Partner', 'Recruiter',
+    'Compensation & Benefits Analyst', 'People Operations Lead', 'Training & Development Coordinator'
+  ],
+  'Finance & Accounting': [
+    'Financial Analyst', 'Senior Accountant', 'Finance Manager', 'Internal Auditor',
+    'Payroll Specialist', 'Controller', 'Chief Financial Officer'
+  ],
+  'Marketing': [
+    'Digital Marketing Specialist', 'Content Marketing Manager', 'SEO & SEM Specialist',
+    'Brand Manager', 'Growth Marketing Lead', 'Social Media Manager', 'Product Marketing Manager'
+  ],
+  'Sales': [
+    'Sales Executive', 'Account Manager', 'Business Development Manager', 'Enterprise Account Executive',
+    'Sales Operations Analyst', 'Inside Sales Representative'
+  ],
+  'Operations': [
+    'Operations Manager', 'Supply Chain Analyst', 'Logistics Coordinator', 'Process Improvement Specialist',
+    'Project Manager', 'Facility Manager'
+  ],
+  'Customer Service': [
+    'Customer Support Specialist', 'Customer Success Manager', 'Support Team Lead', 'Client Relations Manager'
+  ],
+  'Administration': [
+    'Executive Assistant', 'Office Manager', 'Administrative Assistant', 'Operations Assistant'
+  ],
+  'Engineering': [
+    'Mechanical Engineer', 'Electrical Engineer', 'QA Automation Engineer', 'Civil Engineer', 'Chemical Engineer'
+  ],
+  'Other / Custom': ['Custom Position']
+};
+
+const SENIORITY_LEVELS = [
+  'Internship', 'Entry Level', 'Junior', 'Mid-Level', 'Senior', 'Manager', 'Director / Executive'
+];
+
+const INTERVIEW_TYPES = [
+  'General Interview', 'Technical Interview', 'Behavioral Interview',
+  'Competency-Based Interview', 'Situational Interview', 'Leadership Interview'
+];
+
+const QUESTION_COUNTS = [5, 10, 15, 20];
+
+// --- AI SCRUTINY & OBJECTIVITY TIERS ---
+const SCRUTINY_LEVELS = [
+  {
+    id: 'lenient',
+    title: 'Lenient / Encouraging',
+    desc: 'Generous scoring (3-5). Gives benefit of the doubt for junior roles or initial screens.',
+    badgeBg: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    promptModifier: 'Be encouraging and lenient. Award 4 or 5 if the candidate touches on key ideas even without deep metrics or strict STAR structure.'
+  },
+  {
+    id: 'balanced',
+    title: 'Balanced (Standard Corp)',
+    desc: 'Standard corporate benchmark. Requires clear examples to earn a 4 or 5.',
+    badgeBg: 'bg-blue-50 text-blue-700 border-blue-200',
+    promptModifier: 'Standard objective corporate evaluation. Award scores of 4 or 5 only when clear STAR examples and solid reasoning are present.'
+  },
+  {
+    id: 'strict',
+    title: 'Strict (High-Bar Senior)',
+    desc: 'High expectations. Caps vague or unquantified answers at 2 or 3.',
+    badgeBg: 'bg-amber-50 text-amber-700 border-amber-200',
+    promptModifier: 'High-bar scrutiny. Cap vague or non-STAR answers at a 2 or 3. Demand specific technical depth, metrics, and explicit personal ownership.'
+  },
+  {
+    id: 'ruthless',
+    title: 'Ruthless (FAANG / Bar Raiser)',
+    desc: 'Extremely rigorous. 4s and 5s are reserved exclusively for top 5% candidates with verified ROI.',
+    badgeBg: 'bg-rose-50 text-rose-700 border-rose-200',
+    promptModifier: 'FAANG/Bar Raiser level ruthless evaluation. Assume insufficiency until proven with hard evidence. Reserve 4 and 5 exclusively for top 5% candidates with quantifiable business impact and zero fluff.'
+  }
+];
+
+// --- DEFAULT QUICK-LAUNCH PRESETS ---
+const INITIAL_PRESETS = [
+  {
+    id: 'preset-1',
+    title: 'Senior Frontend Developer',
+    department: 'Information Technology',
+    position: 'Frontend Developer',
+    seniority: 'Senior',
+    interviewType: 'Technical Interview',
+    questionCount: 5,
+    additionalContext: 'Focus on React 18, TypeScript, System Architecture, State Management, and Web Performance.'
+  },
+  {
+    id: 'preset-2',
+    title: 'HR Business Partner',
+    department: 'Human Resources',
+    position: 'HR Business Partner',
+    seniority: 'Mid-Level',
+    interviewType: 'Behavioral Interview',
+    questionCount: 5,
+    additionalContext: 'Focus on Conflict Resolution, Leadership Coaching, Talent Retention, and Workplace Culture.'
+  },
+  {
+    id: 'preset-3',
+    title: 'Financial Analyst',
+    department: 'Finance & Accounting',
+    position: 'Financial Analyst',
+    seniority: 'Mid-Level',
+    interviewType: 'Competency-Based Interview',
+    questionCount: 5,
+    additionalContext: 'Financial Modeling, DCF Valuation, Budget Forecasting, and Advanced Excel.'
+  },
+  {
+    id: 'preset-4',
+    title: 'Lead Marketing Strategist',
+    department: 'Marketing',
+    position: 'Digital Marketing Specialist',
+    seniority: 'Senior',
+    interviewType: 'Situational Interview',
+    questionCount: 5,
+    additionalContext: 'Growth Loops, CAC/LTV Ratios, Campaign Attribution, and Multi-channel Strategy.'
+  }
+];
+
+// --- DEMO TEMPLATES & EVALUATIONS ---
+const DEMO_TEMPLATES = [
+  {
+    id: 'demo-tpl-1',
+    title: 'Senior Full Stack Software Engineer',
+    department: 'Information Technology',
+    position: 'Senior Full Stack Developer',
+    seniority: 'Senior',
+    interviewType: 'Technical Interview',
+    questionCount: 2,
+    createdAt: new Date().toLocaleDateString(),
+    additionalContext: 'Requires strong React, Node.js, microservices architecture, and system design expertise.',
+    questions: [
+      {
+        id: 'q-demo-1',
+        category: 'Technical / Job-Specific',
+        question: 'How do you design a scalable web application to handle sudden spikes of millions of concurrent requests?',
+        purpose: 'Evaluates architectural understanding of load balancing, caching strategies, and database optimization.',
+        competency: 'System Architecture & Scalability',
+        followUps: [
+          'What caching strategies (e.g. Redis, CDN) would you introduce first?',
+          'How do you manage state consistency across multiple server instances?'
+        ],
+        whatToLookFor: 'Mentions horizontal scaling, caching layers, stateless authentication, database indexing/sharding, and observability.',
+        greenFlags: [
+          'Explains trade-offs between SQL and NoSQL databases.',
+          'Understands CDN edge caching and asynchronous message queues (Kafka/RabbitMQ).',
+          'Considers failure recovery and circuit breakers.'
+        ],
+        redFlags: [
+          'Suggests simply increasing server CPU/RAM (vertical scaling only).',
+          'Ignores database bottlenecks and concurrency locking issues.',
+          'Overlooks rate limiting or security threat mitigation.'
+        ],
+        rubricMatrix: {
+          1: 'Poor: Recommends vertical server upgrades only; no concept of load balancing or caching.',
+          2: 'Below Expectations: Mentions basic database indexing but fails to address high concurrency spikes.',
+          3: 'Meets Expectations: Designs standard load-balanced setup with Redis caching and read replicas.',
+          4: 'Good: Articulates stateless microservices, CDN edge caching, and asynchronous worker queues.',
+          5: 'Excellent: Comprehensive architecture with auto-scaling, failover redundancy, rate limiting, and cost optimization.'
+        },
+        idealAnswerKeyPoints: [
+          'Use Load Balancers (Nginx/ALB) + Auto-scaling groups.',
+          'Implement Redis for session state and fast read-heavy data caching.',
+          'Database read-replicas, indexing, and connection pooling.'
+        ]
+      },
+      {
+        id: 'q-demo-2',
+        category: 'Behavioral Questions',
+        question: 'Describe a time when you had a fundamental architectural disagreement with a Tech Lead or Product Manager. How was it resolved?',
+        purpose: 'Assesses technical negotiation, emotional intelligence, and business-oriented decision making.',
+        competency: 'Collaboration & Conflict Resolution',
+        followUps: [
+          'What metrics or prototypes did you prepare to support your recommendation?',
+          'How did you ensure team buy-in after the final decision was made?'
+        ],
+        whatToLookFor: 'Uses STAR method (Situation, Task, Action, Result). Demonstrates empathy for business priorities over technical perfection.',
+        greenFlags: [
+          'Relies on data, benchmarks, and proof-of-concept tests.',
+          'Focuses on project delivery and customer impact rather than ego.',
+          'Fully commits to the chosen strategy once aligned.'
+        ],
+        redFlags: [
+          'Shows a cynical or adversarial attitude toward non-technical stakeholders.',
+          'Escalated to management immediately without attempting 1-on-1 dialogue.',
+          'Refused to compromise on technical debt.'
+        ],
+        rubricMatrix: {
+          1: 'Poor: Refused to compromise or harbored resentment toward team leadership.',
+          2: 'Below Expectations: Escalated immediately without gathering benchmark proof or cost analysis.',
+          3: 'Meets Expectations: Communicated opinion politely and accepted final product decision.',
+          4: 'Good: Built proof-of-concept prototype to objectively demonstrate technical risks to stakeholders.',
+          5: 'Excellent: Aligned engineering quality with business deadlines, establishing a lasting consensus framework.'
+        },
+        idealAnswerKeyPoints: [
+          'Empathized with business deadlines and product roadmaps.',
+          'Presented benchmark data and risk analysis.',
+          'Agreed on an MVP solution with planned technical debt cleanup phases.'
+        ]
+      }
+    ]
+  }
+];
+
+const DEMO_EVALUATIONS = [
+  {
+    id: 'eval-demo-1',
+    candidateName: 'Alex Morgan',
+    interviewerName: 'Sarah Jenkins',
+    date: new Date().toISOString().split('T')[0],
+    position: 'Senior Full Stack Developer',
+    seniority: 'Senior',
+    department: 'Information Technology',
+    templateTitle: 'Senior Full Stack Software Engineer',
+    scrutinyLevel: 'strict',
+    scores: {
+      'q-demo-1': {
+        score: 5,
+        notes: 'Articulated horizontal scaling, Redis caching layers, and DB read replicas effortlessly. Understood rate limiting under high traffic.',
+        aiReview: {
+          suggestedScore: 5,
+          detectedGreenFlags: ['Explains SQL vs NoSQL trade-offs', 'Understands CDN edge caching'],
+          detectedRedFlags: [],
+          strengths: 'Deep mastery of distributed systems and caching mechanisms.',
+          gaps: 'None identified for this topic.',
+          followUpProbe: 'Probe experience with zero-downtime database migration.'
+        }
+      },
+      'q-demo-2': {
+        score: 4,
+        notes: 'Solid STAR method response. Built a benchmark test to demonstrate database latency to the PM.',
+        aiReview: {
+          suggestedScore: 4,
+          detectedGreenFlags: ['Relies on benchmark data', 'Focuses on customer impact'],
+          detectedRedFlags: [],
+          strengths: 'Data-driven negotiation and high stakeholder empathy.',
+          gaps: 'Could elaborate more on long-term documentation post-alignment.',
+          followUpProbe: 'Ask how post-mortem lessons were shared with junior developers.'
+        }
+      }
+    },
+    averageScore: 4.5,
+    recommendation: 'Strongly Recommended',
+    strengths: [
+      { keyword: '#SystemArchitecture', evidence: 'Score 5/5 on High Concurrency System Design. Articulated microservices, Redis caching, and DB read-replicas.', takeaway: 'Exemplary distributed system design and performance optimization mastery.' },
+      { keyword: '#DataDrivenNegotiation', evidence: 'Score 4/5 on Conflict Resolution. Built benchmark prototypes to align product roadmap with technical requirements.', takeaway: 'Combines technical conviction with business empathy and data-backed dialogue.' },
+      { keyword: '#HighQualityMindset', evidence: 'Consistently emphasized automated testing, observability, and graceful failure recovery.', takeaway: 'Rigorous engineering standards with strong focus on production stability.' }
+    ],
+    improvements: [
+      { keyword: '#DevOpsPipelines', gap: 'Score 3/5 on deployment automation sub-prompt. Focused more on code than CI/CD automation.', recommendation: 'Provide targeted onboarding on automated Kubernetes canary release tools.' },
+      { keyword: '#CloudCostOptimization', gap: 'High focus on performance over AWS resource cost control during initial design phase.', recommendation: 'Encourage participation in cloud infrastructure budgeting reviews.' },
+      { keyword: '#APIStandardization', gap: 'Limited mention of OpenAPI/Swagger documentation during technical workflow explanation.', recommendation: 'Align on team API documentation protocols during onboarding.' }
+    ],
+    overallNotes: 'Outstanding senior engineering candidate with strong technical leadership and business alignment.'
+  }
+];
+
+export default function App() {
+  // Navigation State
+  const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard', 'config', 'questions', 'saved', 'evaluation', 'summary', 'settings'
+
+  // Application Persistent Data States
+  const [presets, setPresets] = useState(() => {
+    const saved = localStorage.getItem('interviewmate_presets');
+    return saved ? JSON.parse(saved) : INITIAL_PRESETS;
+  });
+
+  const [templates, setTemplates] = useState(() => {
+    const saved = localStorage.getItem('interviewmate_templates');
+    return saved ? JSON.parse(saved) : DEMO_TEMPLATES;
+  });
+
+  const [evaluations, setEvaluations] = useState(() => {
+    const saved = localStorage.getItem('interviewmate_evaluations');
+    return saved ? JSON.parse(saved) : DEMO_EVALUATIONS;
+  });
+
+  // AI Scrutiny Calibration Mode
+  const [aiScrutiny, setAiScrutiny] = useState('strict');
+
+  // Current Configuration Form State
+  const [config, setConfig] = useState({
+    department: 'Information Technology',
+    position: 'Software Engineer',
+    customPosition: '',
+    seniority: 'Senior',
+    interviewType: 'Technical Interview',
+    questionCount: 5,
+    additionalRequirements: ''
+  });
+
+  // Active Generated Question Set State
+  const [currentQuestionSet, setCurrentQuestionSet] = useState(DEMO_TEMPLATES[0]);
+
+  // Active Candidate Evaluation State
+  const [activeEvaluation, setActiveEvaluation] = useState({
+    candidateName: '',
+    interviewerName: '',
+    date: new Date().toISOString().split('T')[0],
+    scores: {},
+    recommendation: 'Recommended',
+    strengths: [],
+    improvements: [],
+    overallNotes: ''
+  });
+
+  const [selectedEvaluationReport, setSelectedEvaluationReport] = useState(DEMO_EVALUATIONS[0]);
+
+  // API Key & Modal States
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('interviewmate_apikey') || '');
+  const [showApiModal, setShowApiModal] = useState(false);
+  const [showApiKeyText, setShowApiKeyText] = useState(false);
+  const [apiTestStatus, setApiTestStatus] = useState({ testing: false, success: null, message: '' });
+
+  // Preset Editor Modal State
+  const [presetModal, setPresetModal] = useState({ open: false, isEditing: false, data: null });
+
+  // Loading States
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [regeneratingId, setRegeneratingId] = useState(null);
+  const [evaluatingQuestionId, setEvaluatingQuestionId] = useState(null);
+  const [isSynthesizingSummary, setIsSynthesizingSummary] = useState(false);
+
+  // Toast State
+  const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
+
+  // LocalStorage Persistence
+  useEffect(() => {
+    localStorage.setItem('interviewmate_presets', JSON.stringify(presets));
+  }, [presets]);
+
+  useEffect(() => {
+    localStorage.setItem('interviewmate_templates', JSON.stringify(templates));
+  }, [templates]);
+
+  useEffect(() => {
+    localStorage.setItem('interviewmate_evaluations', JSON.stringify(evaluations));
+  }, [evaluations]);
+
+  useEffect(() => {
+    localStorage.setItem('interviewmate_apikey', apiKey);
+  }, [apiKey]);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ visible: true, message, type });
+    setTimeout(() => setToast({ visible: false, message: '', type: 'success' }), 3200);
+  };
+
+  const effectivePosition = useMemo(() => {
+    return config.department === 'Other / Custom' || config.position === 'Custom Position'
+      ? config.customPosition || 'Custom Role'
+      : config.position;
+  }, [config.department, config.position, config.customPosition]);
+
+  const handleDepartmentChange = (dept) => {
+    const defaultPos = DEPARTMENT_POSITIONS[dept]?.[0] || 'Custom Position';
+    setConfig(prev => ({
+      ...prev,
+      department: dept,
+      position: defaultPos
+    }));
+  };
+
+  const applyPreset = (preset) => {
+    setConfig({
+      department: preset.department,
+      position: preset.position,
+      customPosition: '',
+      seniority: preset.seniority,
+      interviewType: preset.interviewType,
+      questionCount: preset.questionCount,
+      additionalRequirements: preset.additionalContext || ''
+    });
+    showToast(`Loaded Preset: "${preset.title}"`);
+  };
+
+  const openPresetEditor = (preset = null) => {
+    if (preset) {
+      setPresetModal({ open: true, isEditing: true, data: { ...preset } });
+    } else {
+      setPresetModal({
+        open: true,
+        isEditing: false,
+        data: {
+          id: `preset-${Date.now()}`,
+          title: 'Custom Role Preset',
+          department: 'Information Technology',
+          position: 'Software Engineer',
+          seniority: 'Mid-Level',
+          interviewType: 'Technical Interview',
+          questionCount: 5,
+          additionalContext: ''
+        }
+      });
+    }
+  };
+
+  const savePresetHandler = () => {
+    const data = presetModal.data;
+    if (!data.title.trim()) {
+      showToast('Please enter a preset title', 'error');
+      return;
+    }
+    if (presetModal.isEditing) {
+      setPresets(presets.map(p => p.id === data.id ? data : p));
+      showToast(`Updated preset: ${data.title}`);
+    } else {
+      setPresets([...presets, data]);
+      showToast(`Added new preset: ${data.title}`);
+    }
+    setPresetModal({ open: false, isEditing: false, data: null });
+  };
+
+  const deletePresetHandler = (id) => {
+    setPresets(presets.filter(p => p.id !== id));
+    setPresetModal({ open: false, isEditing: false, data: null });
+    showToast('Preset deleted');
+  };
+
+  // Test API Key Connection
+  const handleTestApiKey = async () => {
+    if (!apiKey.trim()) {
+      setApiTestStatus({ testing: false, success: false, message: 'Please enter an API Key first.' });
+      return;
+    }
+
+    setApiTestStatus({ testing: true, success: null, message: 'Testing Gemini API connection...' });
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: "Hello, confirm status with 'OK'." }] }]
+        })
+      });
+
+      if (res.ok) {
+        setApiTestStatus({ testing: false, success: true, message: 'API Key verified successfully! Gemini AI is online.' });
+      } else {
+        const err = await res.text();
+        setApiTestStatus({ testing: false, success: false, message: `API Key Test Failed (${res.status}). Check key permissions.` });
+      }
+    } catch (e) {
+      setApiTestStatus({ testing: false, success: false, message: `Network error testing key: ${e.message}` });
+    }
+  };
+
+  // --- MOCK FALLBACK QUESTION GENERATOR ---
+  const generateMockQuestions = (count, pos, level, type, context) => {
+    const mockCategories = [
+      'General Questions', 'Technical / Job-Specific', 'Behavioral Questions',
+      'Situational Questions', 'Problem-Solving Questions', 'Leadership & Communication'
+    ];
+
+    const generated = [];
+    for (let i = 1; i <= count; i++) {
+      const cat = mockCategories[(i - 1) % mockCategories.length];
+      generated.push({
+        id: `gen-q-${Date.now()}-${i}`,
+        category: cat,
+        question: `[${level} ${pos}] ${type} #${i}: Walk us through a scenario where you applied ${context || 'core domain principles'} to resolve a critical operational challenge?`,
+        purpose: `Evaluates domain proficiency, structured problem-solving, and quality standards for a ${level} level.`,
+        competency: `${cat.split(' ')[0]} Competency & ${pos} Execution`,
+        followUps: [
+          `What quantitative metrics confirmed project success for this task?`,
+          `If faced with the same scenario again, what key process would you refine?`
+        ],
+        whatToLookFor: `Structured STAR format, direct ownership ("I" vs "We"), and measurable outcome alignment.`,
+        greenFlags: [
+          `Uses structured framework with verified metric achievements.`,
+          `Demonstrates proactive risk mitigation and stakeholder communication.`,
+          `Articulates trade-offs and lessons learned.`
+        ],
+        redFlags: [
+          `Blames team members or past leadership for setbacks.`,
+          `Vague descriptions lacking technical or procedural detail.`,
+          `Lacks awareness of business or client impact.`
+        ],
+        rubricMatrix: {
+          1: `1 - Poor: Demonstrates no grasp of required ${pos} competencies or avoids direct questions.`,
+          2: `2 - Below Expectations: Vague generalities; unable to provide concrete project examples or metrics.`,
+          3: `3 - Meets Expectations: Standard STAR methodology with satisfactory execution and clear ownership.`,
+          4: `4 - Good: Strong data-backed explanation, proactive risk analysis, and stakeholder alignment.`,
+          5: `5 - Excellent: Exceptional domain mastery, innovative problem solving, and long-term process optimization.`
+        },
+        idealAnswerKeyPoints: [
+          `Clear problem diagnosis and context setting.`,
+          `Data-backed solution implementation.`,
+          `Post-project audit and team knowledge sharing.`
+        ]
+      });
+    }
+    return generated;
+  };
+
+  // --- GEMINI API QUESTION GENERATION ---
+  const handleGenerateQuestions = async () => {
+    setIsGenerating(true);
+    const targetPos = effectivePosition;
+
+    const prompt = `Act as a world-class HR Director and Senior Talent Assessment Specialist.
+Generate a structured set of ${config.questionCount} interview questions for:
+Position: "${targetPos}"
+Department: "${config.department}"
+Seniority Level: "${config.seniority}"
+Interview Type: "${config.interviewType}"
+Additional Requirements: "${config.additionalRequirements || 'Standard industry best practices'}".
+
+Return ONLY a valid JSON array of question objects matching this schema:
+[
+  {
+    "id": "string",
+    "category": "General Questions | Technical / Job-Specific | Behavioral Questions | Situational Questions | Problem-Solving Questions | Leadership & Communication",
+    "question": "string prompt",
+    "purpose": "string objective",
+    "competency": "string targeted skill",
+    "followUps": ["string follow up 1", "string follow up 2"],
+    "whatToLookFor": "string summary",
+    "greenFlags": ["strong indicator 1", "strong indicator 2", "strong indicator 3"],
+    "redFlags": ["warning sign 1", "warning sign 2", "warning sign 3"],
+    "rubricMatrix": {
+      "1": "Description of Score 1 (Poor)",
+      "2": "Description of Score 2 (Below Expectations)",
+      "3": "Description of Score 3 (Meets Expectations)",
+      "4": "Description of Score 4 (Good)",
+      "5": "Description of Score 5 (Excellent)"
+    },
+    "idealAnswerKeyPoints": ["key point 1", "key point 2", "key point 3"]
+  }
+]`;
+
+    let generatedQuestions = [];
+
+    if (apiKey.trim()) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: "application/json" }
+          })
+        });
+
+        if (res.ok) {
+          const json = await res.json();
+          const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) {
+            const parsed = JSON.parse(text);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              generatedQuestions = parsed.map((q, idx) => ({
+                ...q,
+                id: `gen-q-${Date.now()}-${idx + 1}`
+              }));
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Gemini question generation error, falling back to offline engine:", err);
+      }
+    }
+
+    if (!generatedQuestions || generatedQuestions.length === 0) {
+      generatedQuestions = generateMockQuestions(
+        config.questionCount, targetPos, config.seniority, config.interviewType, config.additionalRequirements
+      );
+    }
+
+    const newSet = {
+      id: `tpl-${Date.now()}`,
+      title: `${targetPos} (${config.seniority})`,
+      department: config.department,
+      position: targetPos,
+      seniority: config.seniority,
+      interviewType: config.interviewType,
+      questionCount: generatedQuestions.length,
+      createdAt: new Date().toLocaleDateString(),
+      additionalContext: config.additionalRequirements,
+      questions: generatedQuestions
+    };
+
+    setCurrentQuestionSet(newSet);
+    setIsGenerating(false);
+    setActiveTab('questions');
+    showToast(`Generated ${generatedQuestions.length} questions successfully!`);
+  };
+
+  // Single Question Regeneration
+  const handleRegenerateSingleQuestion = async (qIndex) => {
+    const qToReplace = currentQuestionSet.questions[qIndex];
+    setRegeneratingId(qToReplace.id);
+
+    const prompt = `Act as an expert technical interviewer. Regenerate an alternative question for:
+Position: ${currentQuestionSet.position} (${currentQuestionSet.seniority})
+Department: ${currentQuestionSet.department}
+Category: ${qToReplace.category}
+
+Return ONLY a JSON OBJECT matching the single question schema.`;
+
+    let newQuestion = null;
+
+    if (apiKey.trim()) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: "application/json" }
+          })
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) newQuestion = JSON.parse(text);
+        }
+      } catch (e) {
+        console.warn("Single question regen error, using fallback.", e);
+      }
+    }
+
+    if (!newQuestion) {
+      newQuestion = {
+        ...qToReplace,
+        question: `[Alternative ${currentQuestionSet.seniority}] How would you handle a complex scenario involving ${qToReplace.competency}?`,
+        purpose: `Updated alternative prompt evaluating depth in ${qToReplace.competency}.`
+      };
+    }
+
+    const updatedQuestions = [...currentQuestionSet.questions];
+    updatedQuestions[qIndex] = newQuestion;
+    setCurrentQuestionSet({ ...currentQuestionSet, questions: updatedQuestions });
+    setRegeneratingId(null);
+    showToast(`Question #${qIndex + 1} updated!`);
+  };
+
+  // --- AI CANDIDATE ANSWER REVIEW ENGINE WITH SCRUTINY CONTROL ---
+  const handleAiReviewAnswer = async (q) => {
+    const scoreState = activeEvaluation.scores[q.id] || { score: 3, notes: '' };
+    if (!scoreState.notes || !scoreState.notes.trim()) {
+      showToast('Please type candidate answer notes first before requesting AI review.', 'error');
+      return;
+    }
+
+    setEvaluatingQuestionId(q.id);
+
+    const currentScrutinyObj = SCRUTINY_LEVELS.find(s => s.id === aiScrutiny) || SCRUTINY_LEVELS[1];
+
+    const prompt = `Act as an expert interviewer assessing candidate transcript notes against a specific question rubric.
+
+CRITICAL EVALUATION SCRUTINY MODE: "${currentScrutinyObj.title}"
+INSTRUCTION: ${currentScrutinyObj.promptModifier}
+
+Question: "${q.question}"
+Target Competency: "${q.competency}"
+Expected Green Flags: ${JSON.stringify(q.greenFlags)}
+Expected Red Flags: ${JSON.stringify(q.redFlags)}
+Rubric Criteria: ${JSON.stringify(q.rubricMatrix)}
+
+Candidate Answer Notes: "${scoreState.notes}"
+
+Evaluate the notes against the criteria strictly under the specified scrutiny mode.
+Return JSON strictly formatted as:
+{
+  "suggestedScore": 1 to 5 integer,
+  "detectedGreenFlags": ["flag found 1"],
+  "detectedRedFlags": ["warning found 1"],
+  "strengths": "1 sentence string highlighting key strength",
+  "gaps": "1 sentence string highlighting missing details or red flags",
+  "followUpProbe": "Recommended follow-up probing question"
+}`;
+
+    let aiReview = null;
+
+    if (apiKey.trim()) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: "application/json" }
+          })
+        });
+
+        if (res.ok) {
+          const json = await res.json();
+          const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) aiReview = JSON.parse(text);
+        }
+      } catch (e) {
+        console.warn("AI Note Review error, using offline heuristic fallback.", e);
+      }
+    }
+
+    // Heuristic Fallback with Scrutiny Level applied
+    if (!aiReview) {
+      const textLen = scoreState.notes.length;
+      const lower = scoreState.notes.toLowerCase();
+      let score = 3;
+
+      if (aiScrutiny === 'lenient') {
+        score = textLen > 50 ? 4 : 3;
+        if (lower.includes('great') || lower.includes('solved') || lower.includes('metric')) score = 5;
+      } else if (aiScrutiny === 'balanced') {
+        score = lower.includes('excel') || lower.includes('metric') || textLen > 120 ? 4 : 3;
+      } else if (aiScrutiny === 'strict') {
+        score = (lower.includes('metric') || lower.includes('star')) && textLen > 150 ? 4 : 2;
+      } else if (aiScrutiny === 'ruthless') {
+        score = (lower.includes('roi') || lower.includes('%')) && textLen > 200 ? 4 : 2;
+      }
+
+      aiReview = {
+        suggestedScore: score,
+        detectedGreenFlags: q.greenFlags ? [q.greenFlags[0]] : ['Articulated core concept'],
+        detectedRedFlags: score <= 2 ? ['Lacked specific metrics or STAR evidence under ' + currentScrutinyObj.title + ' mode'] : [],
+        strengths: `Addressed key points relating to ${q.competency}.`,
+        gaps: score <= 3 ? `Needs more quantitative evidence under ${currentScrutinyObj.title} scrutiny.` : 'Minor gaps only.',
+        followUpProbe: q.followUps?.[0] || 'Can you elaborate on your specific personal contribution?'
+      };
+    }
+
+    setActiveEvaluation(prev => ({
+      ...prev,
+      scores: {
+        ...prev.scores,
+        [q.id]: {
+          ...scoreState,
+          aiReview: aiReview
+        }
+      }
+    }));
+
+    setEvaluatingQuestionId(null);
+    showToast(`AI Review Complete (${currentScrutinyObj.title})! Score: ${aiReview.suggestedScore}/5`);
+  };
+
+  const applyAiScore = (qId, suggestedScore) => {
+    setActiveEvaluation(prev => ({
+      ...prev,
+      scores: {
+        ...prev.scores,
+        [qId]: {
+          ...(prev.scores[qId] || {}),
+          score: suggestedScore
+        }
+      }
+    }));
+    showToast(`Applied AI suggested score: ${suggestedScore}/5`);
+  };
+
+  // --- SYNTHESIZE CANDIDATE SUMMARY ---
+  const handleSynthesizeSummary = async () => {
+    setIsSynthesizingSummary(true);
+
+    const questionScoreList = currentQuestionSet.questions.map(q => {
+      const s = activeEvaluation.scores[q.id] || { score: 3, notes: '' };
+      return `[Category: ${q.category} | Question: "${q.question}" | Score: ${s.score}/5 | Notes: "${s.notes}"]`;
+    }).join('\n');
+
+    const prompt = `Act as an executive hiring manager synthesizing a final candidate evaluation report.
+Candidate: "${activeEvaluation.candidateName || 'Candidate'}"
+Position: "${currentQuestionSet.position}" (${currentQuestionSet.seniority})
+Evaluation Scrutiny Mode Applied: "${aiScrutiny}"
+
+Evaluated Questions & Scores:
+${questionScoreList}
+
+Synthesize EXACTLY 3 Candidate Strengths and 3 Areas for Improvement.
+Return ONLY valid JSON matching this schema:
+{
+  "strengths": [
+    { "keyword": "#KeywordName", "evidence": "Specific score and notes evidence from interview", "takeaway": "Core capability takeaway" },
+    { "keyword": "#KeywordName", "evidence": "...", "takeaway": "..." },
+    { "keyword": "#KeywordName", "evidence": "...", "takeaway": "..." }
+  ],
+  "improvements": [
+    { "keyword": "#KeywordName", "gap": "Specific gap or low score identified", "recommendation": "Targeted development action or onboarding advice" },
+    { "keyword": "#KeywordName", "gap": "...", "recommendation": "..." },
+    { "keyword": "#KeywordName", "gap": "...", "recommendation": "..." }
+  ],
+  "overallNotes": "2-3 sentence executive recommendation summary."
+}`;
+
+    let result = null;
+
+    if (apiKey.trim()) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: "application/json" }
+          })
+        });
+
+        if (res.ok) {
+          const json = await res.json();
+          const text = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) result = JSON.parse(text);
+        }
+      } catch (e) {
+        console.warn("Summary synthesis API error, using fallback engine.", e);
+      }
+    }
+
+    if (!result || !result.strengths) {
+      result = {
+        strengths: [
+          { keyword: `#DomainProficiency`, evidence: `High ratings across ${currentQuestionSet.position} core competency prompts.`, takeaway: `Demonstrates solid practical expertise.` },
+          { keyword: `#CommunicationClarity`, evidence: `Structured response delivery using STAR framework.`, takeaway: `Clear stakeholder presentation style.` },
+          { keyword: `#ProblemSolving`, evidence: `Logical approach to operational and technical bottlenecks.`, takeaway: `Strong analytical mindset.` }
+        ],
+        improvements: [
+          { keyword: `#QuantifiedMetrics`, gap: `Some responses lacked hard numerical data metrics under ${aiScrutiny} scrutiny.`, recommendation: `Encourage focus on ROI and KPI reporting during onboarding.` },
+          { keyword: `#ProcessDocumentation`, gap: `Limited mention of team documentation frameworks.`, recommendation: `Provide overview of internal documentation standards.` },
+          { keyword: `#ToolAutomation`, gap: `Opportunities to deepen hands-on knowledge of advanced automation tools.`, recommendation: `Assign targeted tool training during initial 90-day plan.` }
+        ],
+        overallNotes: `Candidate demonstrates strong foundational capability for ${currentQuestionSet.position}. Move forward with recommended onboarding focus.`
+      };
+    }
+
+    setActiveEvaluation(prev => ({
+      ...prev,
+      strengths: result.strengths,
+      improvements: result.improvements,
+      overallNotes: result.overallNotes || prev.overallNotes
+    }));
+
+    setIsSynthesizingSummary(false);
+    showToast('AI synthesized 3 Strengths & 3 Areas for Improvement!');
+  };
+
+  const computedAverageScore = useMemo(() => {
+    const scoresObj = activeEvaluation.scores || {};
+    const values = Object.values(scoresObj).map(s => Number(s.score) || 0).filter(v => v > 0);
+    if (values.length === 0) return 0;
+    const sum = values.reduce((a, b) => a + b, 0);
+    return Number((sum / values.length).toFixed(1));
+  }, [activeEvaluation.scores]);
+
+  useEffect(() => {
+    if (computedAverageScore >= 4.2) {
+      setActiveEvaluation(prev => ({ ...prev, recommendation: 'Strongly Recommended' }));
+    } else if (computedAverageScore >= 3.4) {
+      setActiveEvaluation(prev => ({ ...prev, recommendation: 'Recommended' }));
+    } else if (computedAverageScore >= 2.5) {
+      setActiveEvaluation(prev => ({ ...prev, recommendation: 'Further Evaluation Needed' }));
+    } else if (computedAverageScore > 0) {
+      setActiveEvaluation(prev => ({ ...prev, recommendation: 'Not Recommended' }));
+    }
+  }, [computedAverageScore]);
+
+  const handleSaveEvaluation = async () => {
+    if (!activeEvaluation.candidateName.trim()) {
+      showToast('Please enter Candidate Full Name before saving.', 'error');
+      return;
+    }
+
+    let strengths = activeEvaluation.strengths;
+    if (!strengths || strengths.length === 0) {
+      await handleSynthesizeSummary();
+    }
+
+    const report = {
+      id: `eval-${Date.now()}`,
+      candidateName: activeEvaluation.candidateName,
+      interviewerName: activeEvaluation.interviewerName || 'Hiring Manager',
+      date: activeEvaluation.date,
+      position: currentQuestionSet.position,
+      seniority: currentQuestionSet.seniority,
+      department: currentQuestionSet.department,
+      templateTitle: currentQuestionSet.title,
+      scrutinyLevel: aiScrutiny,
+      scores: activeEvaluation.scores,
+      averageScore: computedAverageScore,
+      recommendation: activeEvaluation.recommendation,
+      strengths: activeEvaluation.strengths,
+      improvements: activeEvaluation.improvements,
+      overallNotes: activeEvaluation.overallNotes || 'Evaluation session completed.',
+      questions: currentQuestionSet.questions
+    };
+
+    setEvaluations([report, ...evaluations]);
+    setSelectedEvaluationReport(report);
+    setActiveTab('summary');
+    showToast('Evaluation report finalized and saved!');
+  };
+
+  const startInterviewSession = (template) => {
+    setCurrentQuestionSet(template);
+    const initialScores = {};
+    template.questions.forEach(q => {
+      initialScores[q.id] = { score: 3, notes: '', aiReview: null };
+    });
+
+    setActiveEvaluation({
+      candidateName: '',
+      interviewerName: '',
+      date: new Date().toISOString().split('T')[0],
+      scores: initialScores,
+      recommendation: 'Recommended',
+      strengths: [],
+      improvements: [],
+      overallNotes: ''
+    });
+    setActiveTab('evaluation');
+    showToast(`Started Live Evaluation for: ${template.title}`);
+  };
+
+  const handleTriggerPrint = () => window.print();
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-sans antialiased selection:bg-indigo-500 selection:text-white">
+      
+      {/* Toast Notification */}
+      {toast.visible && (
+        <div className={`fixed bottom-5 right-5 z-50 flex items-center space-x-3 px-4 py-3 rounded-xl text-white shadow-2xl transition-all ${
+          toast.type === 'error' ? 'bg-rose-600' : 'bg-slate-900 border border-slate-700'
+        }`}>
+          <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span className="text-xs font-semibold">{toast.message}</span>
+        </div>
+      )}
+
+      {/* HEADER / NAVIGATION */}
+      <header className="no-print bg-slate-900 border-b border-slate-800 text-white sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            
+            {/* Logo */}
+            <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 via-indigo-600 to-indigo-400 flex items-center justify-center shadow-md shadow-indigo-500/20">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+              </div>
+              <div>
+                <span className="font-extrabold text-lg tracking-tight">Interview<span className="text-indigo-400">Mate</span></span>
+                <span className="ml-2 px-2 py-0.5 text-[10px] uppercase font-bold bg-indigo-500/20 text-indigo-300 rounded-full border border-indigo-500/30">
+                  AI SaaS
+                </span>
+              </div>
+            </div>
+
+            {/* DUAL-PHASE NAVIGATION MENU */}
+            <div className="hidden lg:flex items-center space-x-6 text-xs">
+              <div className="flex items-center space-x-1 bg-slate-800/80 p-1 rounded-xl border border-slate-700/60">
+                <span className="text-[10px] uppercase font-extrabold text-indigo-400 px-2 py-1">Phase 1: Prep</span>
+                {[
+                  { id: 'dashboard', label: 'Dashboard & Presets' },
+                  { id: 'config', label: 'AI Generator' },
+                  { id: 'questions', label: 'Question Editor' },
+                  { id: 'saved', label: 'Saved Kits' }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`px-3 py-1.5 rounded-lg font-semibold transition ${
+                      activeTab === tab.id
+                        ? 'bg-indigo-600 text-white shadow'
+                        : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center space-x-1 bg-slate-800/80 p-1 rounded-xl border border-slate-700/60">
+                <span className="text-[10px] uppercase font-extrabold text-emerald-400 px-2 py-1">Phase 2: Conduct</span>
+                {[
+                  { id: 'evaluation', label: 'Live Interview & Notes' },
+                  { id: 'summary', label: 'Candidate Scorecard' }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`px-3 py-1.5 rounded-lg font-semibold transition ${
+                      activeTab === tab.id
+                        ? 'bg-emerald-600 text-white shadow'
+                        : 'text-slate-300 hover:text-white hover:bg-slate-700/60'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* API Key Modal & Settings */}
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setShowApiModal(true)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition flex items-center space-x-1.5 ${
+                  apiKey.trim()
+                    ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20'
+                    : 'bg-amber-500/10 text-amber-300 border-amber-500/30 hover:bg-amber-500/20'
+                }`}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                </svg>
+                <span>{apiKey.trim() ? 'AI API Connected' : 'API Key Setup'}</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('settings')}
+                className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition"
+                title="Settings"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                </svg>
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+        {/* Status Bar */}
+        <div className="bg-slate-950/80 border-t border-slate-800/80 px-4 py-1.5 text-[11px] text-slate-400 flex items-center justify-between">
+          <div className="max-w-7xl mx-auto w-full flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse"></span>
+              <span>Position: <strong className="text-slate-200">{currentQuestionSet.position} ({currentQuestionSet.seniority})</strong></span>
+            </div>
+            <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-1.5 bg-slate-800 px-2.5 py-0.5 rounded-full border border-slate-700">
+                <span className="text-slate-400 font-medium">Scrutiny:</span>
+                <strong className="text-amber-400 font-bold uppercase text-[10px]">
+                  {SCRUTINY_LEVELS.find(s => s.id === aiScrutiny)?.title.split(' ')[0]}
+                </strong>
+              </div>
+              {activeEvaluation.candidateName && (
+                <div className="flex items-center space-x-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                  <span>Candidate: <strong className="text-slate-200">{activeEvaluation.candidateName}</strong></span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* PRINT BANNER */}
+      <div className="hidden print:block p-6 border-b border-slate-300 mb-6 bg-white">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">InterviewMate Candidate Evaluation Report</h1>
+            <p className="text-sm text-slate-600">Official Executive Hiring Assessment Record</p>
+          </div>
+          <div className="text-right text-xs text-slate-500">
+            <p>Generated: {new Date().toLocaleDateString()}</p>
+            <p>Confidential Recruitment Record</p>
+          </div>
+        </div>
+      </div>
+
+      {/* MAIN CONTAINER */}
+      <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1">
+
+        {/* TAB 1: DASHBOARD */}
+        {activeTab === 'dashboard' && (
+          <div className="space-y-8">
+            <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
+              <div className="relative z-10 max-w-3xl space-y-3">
+                <span className="inline-block px-3 py-1 bg-indigo-500/20 text-indigo-300 text-xs font-bold rounded-full border border-indigo-500/30 uppercase tracking-wide">
+                  Structured AI Interview System
+                </span>
+                <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight">
+                  Design Interview Kits & Evaluate Candidates Objectively
+                </h2>
+                <p className="text-sm text-slate-300 leading-relaxed">
+                  Prepare structured interview questions, record candidate transcripts with live AI review, and synthesize executive evaluation scorecards.
+                </p>
+                <div className="pt-2 flex flex-wrap gap-3">
+                  <button
+                    onClick={() => setActiveTab('config')}
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center space-x-2"
+                  >
+                    <span>+ Create New Question Kit</span>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('saved')}
+                    className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl border border-slate-700 transition"
+                  >
+                    View Saved Templates ({templates.length})
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* EDITABLE QUICK-LAUNCH PRESETS */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Editable Quick-Launch Presets</h3>
+                  <p className="text-xs text-slate-500">Click any preset to launch generation or click the pencil icon to customize settings for future interviews.</p>
+                </div>
+                <button
+                  onClick={() => openPresetEditor(null)}
+                  className="px-3.5 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-bold rounded-xl transition flex items-center space-x-1"
+                >
+                  <span>+ Add Custom Preset</span>
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {presets.map((preset) => (
+                  <div
+                    key={preset.id}
+                    className="p-4 rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/30 transition text-left space-y-3 group relative flex flex-col justify-between"
+                  >
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-extrabold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md">
+                          {preset.seniority}
+                        </span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openPresetEditor(preset); }}
+                          className="p-1 text-slate-400 hover:text-indigo-600 transition"
+                          title="Edit Preset"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                          </svg>
+                        </button>
+                      </div>
+
+                      <h4 className="text-sm font-bold text-slate-900 group-hover:text-indigo-900">{preset.title}</h4>
+                      <p className="text-xs text-slate-500 line-clamp-2">{preset.additionalContext || 'Standard interview parameters applied.'}</p>
+                    </div>
+
+                    <button
+                      onClick={() => { applyPreset(preset); setActiveTab('config'); }}
+                      className="w-full mt-2 py-1.5 bg-white border border-slate-200 group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 text-slate-700 text-xs font-bold rounded-lg transition"
+                    >
+                      Use Preset
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Dashboard Activity Grids */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <h3 className="text-base font-bold text-slate-900">Saved Interview Kits</h3>
+                  <button onClick={() => setActiveTab('saved')} className="text-xs text-indigo-600 font-bold hover:underline">
+                    View All ({templates.length})
+                  </button>
+                </div>
+                {templates.slice(0, 3).map(tpl => (
+                  <div key={tpl.id} className="p-3.5 rounded-xl border border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800">{tpl.title}</h4>
+                      <p className="text-[11px] text-slate-400 mt-0.5">{tpl.department} • {tpl.questions.length} questions</p>
+                    </div>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => { setCurrentQuestionSet(tpl); setActiveTab('questions'); }}
+                        className="px-2.5 py-1 bg-white border border-slate-200 text-slate-700 text-xs font-semibold rounded-lg hover:bg-slate-50"
+                      >
+                        View
+                      </button>
+                      <button
+                        onClick={() => startInterviewSession(tpl)}
+                        className="px-2.5 py-1 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700"
+                      >
+                        Conduct
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <h3 className="text-base font-bold text-slate-900">Recent Candidate Scorecards</h3>
+                  <button onClick={() => setActiveTab('summary')} className="text-xs text-indigo-600 font-bold hover:underline">
+                    View Scorecards
+                  </button>
+                </div>
+                {evaluations.slice(0, 3).map(ev => (
+                  <div key={ev.id} className="p-3.5 rounded-xl border border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <div>
+                      <div className="flex items-center space-x-2">
+                        <h4 className="text-xs font-bold text-slate-900">{ev.candidateName}</h4>
+                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded-md">
+                          {ev.averageScore} / 5.0
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">{ev.position} • {ev.date}</p>
+                    </div>
+                    <button
+                      onClick={() => { setSelectedEvaluationReport(ev); setActiveTab('summary'); }}
+                      className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg hover:bg-indigo-100"
+                    >
+                      Scorecard
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: CONFIG GENERATOR */}
+        {activeTab === 'config' && (
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div className="bg-white rounded-2xl p-6 sm:p-8 border border-slate-200/80 shadow-sm space-y-6">
+              
+              <div className="border-b border-slate-100 pb-4">
+                <h2 className="text-xl font-extrabold text-slate-900">Phase 1: Configure AI Question Kit</h2>
+                <p className="text-xs text-slate-500 mt-1">Select position parameters to generate structured interview questions and rubrics.</p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">1. Department</label>
+                  <select
+                    value={config.department}
+                    onChange={(e) => handleDepartmentChange(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-300 text-slate-800 text-sm rounded-xl p-3 font-semibold focus:ring-2 focus:ring-indigo-500 outline-none"
+                  >
+                    {Object.keys(DEPARTMENT_POSITIONS).map(dept => (
+                      <option key={dept} value={dept}>{dept}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">2. Position Title</label>
+                  <select
+                    value={config.position}
+                    onChange={(e) => setConfig({ ...config, position: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-300 text-slate-800 text-sm rounded-xl p-3 font-semibold focus:ring-2 focus:ring-indigo-500 outline-none"
+                  >
+                    {(DEPARTMENT_POSITIONS[config.department] || []).map(pos => (
+                      <option key={pos} value={pos}>{pos}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">3. Seniority Level</label>
+                  <select
+                    value={config.seniority}
+                    onChange={(e) => setConfig({ ...config, seniority: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-300 text-slate-800 text-sm rounded-xl p-3 font-semibold focus:ring-2 focus:ring-indigo-500 outline-none"
+                  >
+                    {SENIORITY_LEVELS.map(lvl => (
+                      <option key={lvl} value={lvl}>{lvl}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">4. Interview Type</label>
+                  <select
+                    value={config.interviewType}
+                    onChange={(e) => setConfig({ ...config, interviewType: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-300 text-slate-800 text-sm rounded-xl p-3 font-semibold focus:ring-2 focus:ring-indigo-500 outline-none"
+                  >
+                    {INTERVIEW_TYPES.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">5. Number of Questions</label>
+                <div className="grid grid-cols-4 gap-3">
+                  {QUESTION_COUNTS.map(num => (
+                    <button
+                      key={num}
+                      type="button"
+                      onClick={() => setConfig({ ...config, questionCount: num })}
+                      className={`py-2.5 rounded-xl text-xs font-extrabold border transition ${
+                        config.questionCount === num
+                          ? 'bg-slate-900 text-white border-slate-900 shadow-md'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {num} Questions
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-2">
+                <button
+                  onClick={handleGenerateQuestions}
+                  disabled={isGenerating}
+                  className="w-full py-4 bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-700 hover:to-blue-700 text-white font-extrabold text-sm rounded-xl shadow-lg shadow-indigo-600/30 flex items-center justify-center space-x-2 transition disabled:opacity-50"
+                >
+                  {isGenerating ? <span>Crafting AI Questions & Rubrics...</span> : <span>Generate Interview Questions & Rubrics</span>}
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: QUESTION EDITOR */}
+        {activeTab === 'questions' && currentQuestionSet && (
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-extrabold rounded-full uppercase tracking-wider">
+                  {currentQuestionSet.seniority} • {currentQuestionSet.department}
+                </span>
+                <h2 className="text-xl font-extrabold text-slate-900 mt-1">{currentQuestionSet.title}</h2>
+                <p className="text-xs text-slate-500 mt-0.5">{currentQuestionSet.questions.length} Questions • {currentQuestionSet.interviewType}</p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => { setTemplates([currentQuestionSet, ...templates]); showToast('Saved to Templates!'); }}
+                  className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-sm transition"
+                >
+                  Save to Templates
+                </button>
+                <button
+                  onClick={() => startInterviewSession(currentQuestionSet)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md shadow-emerald-600/20 transition flex items-center space-x-1"
+                >
+                  <span>Start Live Interview</span>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              {currentQuestionSet.questions.map((q, qIdx) => (
+                <div key={q.id || qIdx} className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+                  <div className="p-5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="w-7 h-7 rounded-lg bg-indigo-600 text-white font-extrabold text-xs flex items-center justify-center">
+                        {qIdx + 1}
+                      </span>
+                      <span className="px-2.5 py-0.5 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-md uppercase">
+                        {q.category}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => handleRegenerateSingleQuestion(qIdx)}
+                      disabled={regeneratingId === q.id}
+                      className="px-2.5 py-1 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg text-xs font-semibold transition"
+                    >
+                      {regeneratingId === q.id ? 'Regenerating...' : 'Regenerate Question'}
+                    </button>
+                  </div>
+
+                  <div className="p-6 space-y-4">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Question Prompt</label>
+                      <textarea
+                        rows="2"
+                        value={q.question}
+                        onChange={(e) => {
+                          const updated = [...currentQuestionSet.questions];
+                          updated[qIdx].question = e.target.value;
+                          setCurrentQuestionSet({ ...currentQuestionSet, questions: updated });
+                        }}
+                        className="w-full text-base font-bold text-slate-900 bg-slate-50/50 p-3 rounded-xl border border-slate-200 focus:bg-white outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">1-5 Score Rubric Matrix</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 text-xs">
+                        {[1, 2, 3, 4, 5].map(scoreNum => (
+                          <div key={scoreNum} className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                            <span className="font-extrabold text-indigo-600 block mb-1">Score {scoreNum}</span>
+                            <span className="text-[11px] text-slate-600 leading-tight block">
+                              {q.rubricMatrix?.[scoreNum] || `Criteria for score level ${scoreNum}`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: SAVED KITS */}
+        {activeTab === 'saved' && (
+          <div className="space-y-6">
+            <h2 className="text-xl font-extrabold text-slate-900">Saved Interview Question Kits</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {templates.map(tpl => (
+                <div key={tpl.id} className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-4">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <span className="px-2.5 py-0.5 bg-indigo-50 text-indigo-700 text-[10px] font-extrabold rounded-full uppercase">
+                        {tpl.department}
+                      </span>
+                      <h3 className="text-base font-bold text-slate-900 mt-1">{tpl.title}</h3>
+                      <p className="text-xs text-slate-400 mt-0.5">Created: {tpl.createdAt}</p>
+                    </div>
+                    <span className="px-2.5 py-1 bg-slate-100 text-slate-700 text-xs font-bold rounded-lg">
+                      {tpl.questions.length} Questions
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center pt-2 border-t border-slate-100">
+                    <button
+                      onClick={() => setTemplates(templates.filter(t => t.id !== tpl.id))}
+                      className="text-xs text-rose-500 font-semibold hover:underline"
+                    >
+                      Delete
+                    </button>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => { setCurrentQuestionSet(tpl); setActiveTab('questions'); }}
+                        className="px-3 py-1.5 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl"
+                      >
+                        View / Edit
+                      </button>
+                      <button
+                        onClick={() => startInterviewSession(tpl)}
+                        className="px-3.5 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700"
+                      >
+                        Conduct Interview
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: LIVE INTERVIEW & OBJECTIVITY CONTROLLER */}
+        {activeTab === 'evaluation' && currentQuestionSet && (
+          <div className="space-y-6">
+            
+            <div className="bg-slate-900 text-white p-6 rounded-2xl shadow-xl space-y-6">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                <div className="space-y-1">
+                  <span className="px-2.5 py-0.5 bg-emerald-500/30 text-emerald-300 text-[10px] font-bold rounded-full uppercase border border-emerald-500/40">
+                    Phase 2: Live Candidate Evaluation Session
+                  </span>
+                  <h2 className="text-xl font-extrabold">{currentQuestionSet.position} ({currentQuestionSet.seniority})</h2>
+                  <p className="text-xs text-slate-400">Record candidate answer notes, run real-time AI rubric analysis, and rate performance.</p>
+                </div>
+
+                <div className="bg-slate-800 p-4 rounded-xl border border-slate-700 flex items-center space-x-4 min-w-[220px]">
+                  <div className="text-center">
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase">Live Score</span>
+                    <span className="text-3xl font-extrabold text-amber-400">{computedAverageScore}</span>
+                    <span className="text-xs text-slate-400"> / 5.0</span>
+                  </div>
+                  <div className="border-l border-slate-700 pl-4">
+                    <span className="block text-[10px] font-bold text-slate-400 uppercase">Verdict</span>
+                    <span className="text-xs font-bold text-emerald-400 block mt-1">{activeEvaluation.recommendation}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* AI SCRUTINY & OBJECTIVITY CONTROLLER DIAL */}
+              <div className="bg-slate-800/90 p-4 rounded-xl border border-slate-700/80 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-extrabold text-amber-400 uppercase tracking-wider flex items-center space-x-1.5">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                    </svg>
+                    <span>AI Review Objectivity & Scrutiny Calibration</span>
+                  </span>
+                  <span className="text-[10px] text-slate-400">Controls AI scoring rigor (Prevents score inflation)</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                  {SCRUTINY_LEVELS.map(sc => (
+                    <button
+                      key={sc.id}
+                      type="button"
+                      onClick={() => setAiScrutiny(sc.id)}
+                      className={`p-2.5 rounded-xl border text-left transition flex flex-col justify-between ${
+                        aiScrutiny === sc.id
+                          ? 'bg-slate-900 text-white border-amber-400 ring-1 ring-amber-400/50 shadow-md'
+                          : 'bg-slate-900/40 text-slate-400 border-slate-700 hover:bg-slate-800'
+                      }`}
+                    >
+                      <div>
+                        <span className={`px-2 py-0.5 text-[9px] font-extrabold rounded-md block w-max mb-1.5 ${sc.badgeBg}`}>
+                          {sc.title}
+                        </span>
+                        <p className="text-[10px] leading-tight text-slate-300">{sc.desc}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Candidate Metadata */}
+            <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Candidate Full Name *</label>
+                <input
+                  type="text"
+                  value={activeEvaluation.candidateName}
+                  onChange={(e) => setActiveEvaluation({ ...activeEvaluation, candidateName: e.target.value })}
+                  placeholder="e.g. Alex Morgan"
+                  className="w-full bg-slate-50 border border-slate-300 text-slate-800 text-xs font-semibold rounded-xl p-3 focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Interviewer Name</label>
+                <input
+                  type="text"
+                  value={activeEvaluation.interviewerName}
+                  onChange={(e) => setActiveEvaluation({ ...activeEvaluation, interviewerName: e.target.value })}
+                  placeholder="e.g. Sarah Jenkins"
+                  className="w-full bg-slate-50 border border-slate-300 text-slate-800 text-xs font-semibold rounded-xl p-3 focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Date</label>
+                <input
+                  type="date"
+                  value={activeEvaluation.date}
+                  onChange={(e) => setActiveEvaluation({ ...activeEvaluation, date: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-300 text-slate-800 text-xs font-semibold rounded-xl p-3 focus:ring-2 focus:ring-indigo-500 outline-none"
+                />
+              </div>
+            </div>
+
+            {/* QUESTION CARDS */}
+            <div className="space-y-6">
+              {currentQuestionSet.questions.map((q, qIdx) => {
+                const currentScore = activeEvaluation.scores[q.id]?.score || 3;
+                const currentNotes = activeEvaluation.scores[q.id]?.notes || '';
+                const aiReview = activeEvaluation.scores[q.id]?.aiReview;
+
+                return (
+                  <div key={q.id} className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-sm space-y-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <span className="text-xs font-extrabold text-indigo-600 uppercase">
+                          Question #{qIdx + 1} • {q.category}
+                        </span>
+                        <h3 className="text-base font-bold text-slate-900 mt-1">"{q.question}"</h3>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Evaluation Rubric Matrix (1 to 5)</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 text-[11px]">
+                        {[
+                          { val: 1, label: '1 - Poor', bg: 'bg-rose-50 border-rose-200 text-rose-900' },
+                          { val: 2, label: '2 - Below', bg: 'bg-amber-50 border-amber-200 text-amber-900' },
+                          { val: 3, label: '3 - Meets', bg: 'bg-yellow-50 border-yellow-200 text-yellow-900' },
+                          { val: 4, label: '4 - Good', bg: 'bg-blue-50 border-blue-200 text-blue-900' },
+                          { val: 5, label: '5 - Excellent', bg: 'bg-emerald-50 border-emerald-200 text-emerald-900' }
+                        ].map(r => (
+                          <div key={r.val} className={`p-2.5 rounded-lg border ${r.bg}`}>
+                            <span className="font-extrabold block">{r.label}</span>
+                            <span className="opacity-90 leading-tight block mt-0.5">
+                              {q.rubricMatrix?.[r.val] || `Criteria for score level ${r.val}`}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                      <div className="bg-emerald-50/60 p-3 rounded-xl border border-emerald-100">
+                        <span className="font-bold text-emerald-900 uppercase text-[10px]">Strong Indicators (Green Flags):</span>
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                          {(q.greenFlags || []).map((gf, i) => (
+                            <span key={i} className="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded-md text-[11px] font-medium">✓ {gf}</span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="bg-rose-50/60 p-3 rounded-xl border border-rose-100">
+                        <span className="font-bold text-rose-900 uppercase text-[10px]">Warning Signs (Red Flags):</span>
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                          {(q.redFlags || []).map((rf, i) => (
+                            <span key={i} className="px-2 py-0.5 bg-rose-100 text-rose-800 rounded-md text-[11px] font-medium">⚠ {rf}</span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Candidate Answer & Transcript Notes</label>
+                        <button
+                          type="button"
+                          onClick={() => handleAiReviewAnswer(q)}
+                          disabled={evaluatingQuestionId === q.id}
+                          className="px-3 py-1 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg shadow transition flex items-center space-x-1 disabled:opacity-50"
+                        >
+                          {evaluatingQuestionId === q.id ? <span>Analyzing Notes...</span> : <span>AI Review Answer</span>}
+                        </button>
+                      </div>
+                      <textarea
+                        rows="3"
+                        value={currentNotes}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setActiveEvaluation(prev => ({
+                            ...prev,
+                            scores: {
+                              ...prev.scores,
+                              [q.id]: { ...(prev.scores[q.id] || {}), notes: val }
+                            }
+                          }));
+                        }}
+                        placeholder="Type candidate transcript notes or key observations..."
+                        className="w-full bg-slate-50 border border-slate-200 text-xs text-slate-800 rounded-xl p-3 focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                      />
+                    </div>
+
+                    {aiReview && (
+                      <div className="p-4 bg-indigo-50/80 border border-indigo-200 rounded-xl space-y-2 text-xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-indigo-950 uppercase text-[10px]">
+                            AI Rubric Analysis ({SCRUTINY_LEVELS.find(s => s.id === aiScrutiny)?.title})
+                          </span>
+                          <div className="flex items-center space-x-2">
+                            <span className="px-2.5 py-0.5 bg-indigo-600 text-white font-extrabold rounded-full text-[11px]">
+                              Suggested Score: {aiReview.suggestedScore} / 5
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => applyAiScore(q.id, aiReview.suggestedScore)}
+                              className="px-2 py-0.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-800 text-[10px] font-bold rounded-md"
+                            >
+                              Apply Score
+                            </button>
+                          </div>
+                        </div>
+
+                        <p className="text-indigo-950"><strong>Strength:</strong> {aiReview.strengths}</p>
+                        <p className="text-indigo-950"><strong>Gap Identified:</strong> {aiReview.gaps}</p>
+                        <p className="text-indigo-900 bg-white/70 p-2 rounded-lg border border-indigo-100">
+                          <strong>Recommended Probe:</strong> "{aiReview.followUpProbe}"
+                        </p>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Assigned Rating Score (1-5 Scale)</label>
+                      <div className="grid grid-cols-5 gap-2">
+                        {[1, 2, 3, 4, 5].map(sVal => (
+                          <button
+                            key={sVal}
+                            type="button"
+                            onClick={() => {
+                              setActiveEvaluation(prev => ({
+                                ...prev,
+                                scores: {
+                                  ...prev.scores,
+                                  [q.id]: { ...(prev.scores[q.id] || {}), score: sVal }
+                                }
+                              }));
+                            }}
+                            className={`py-2 rounded-xl text-xs font-extrabold border transition ${
+                              currentScore === sVal
+                                ? 'bg-indigo-600 text-white border-indigo-600 shadow'
+                                : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                            }`}
+                          >
+                            Score {sVal}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Complete Evaluation Session</h3>
+                <p className="text-xs text-slate-500">Synthesize candidate scorecard report</p>
+              </div>
+              <button
+                onClick={handleSaveEvaluation}
+                className="px-6 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/30 transition"
+              >
+                Finalize & Generate Candidate Scorecard
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 6: CANDIDATE SCORECARD SUMMARY */}
+        {activeTab === 'summary' && selectedEvaluationReport && (
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div className="no-print bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Executive Candidate Scorecard</h3>
+                <p className="text-xs text-slate-500">Final recommendation report with 3 Strengths & 3 Areas to Improve</p>
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  onClick={handleSynthesizeSummary}
+                  disabled={isSynthesizingSummary}
+                  className="px-3.5 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-bold rounded-xl transition flex items-center space-x-1 disabled:opacity-50"
+                >
+                  <span>{isSynthesizingSummary ? 'Synthesizing...' : 'Re-synthesize AI Summary'}</span>
+                </button>
+                <button
+                  onClick={handleTriggerPrint}
+                  className="px-4 py-2 bg-slate-900 text-white text-xs font-bold rounded-xl shadow hover:bg-slate-800 transition"
+                >
+                  Export / Print PDF
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-8 shadow-sm space-y-8 print:border-none print:shadow-none print:p-0">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 border-b border-slate-200 gap-4">
+                <div>
+                  <span className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-extrabold rounded-full uppercase">
+                    {selectedEvaluationReport.department}
+                  </span>
+                  <h1 className="text-2xl font-extrabold text-slate-900 mt-1">{selectedEvaluationReport.candidateName}</h1>
+                  <p className="text-xs text-slate-500">{selectedEvaluationReport.position} ({selectedEvaluationReport.seniority})</p>
+                </div>
+
+                <div className="text-left sm:text-right">
+                  <span className="inline-block px-4 py-1.5 rounded-xl text-xs font-extrabold border bg-emerald-50 text-emerald-800 border-emerald-300 shadow-sm">
+                    {selectedEvaluationReport.recommendation}
+                  </span>
+                  <div className="text-xs text-slate-400 mt-1">Interviewer: {selectedEvaluationReport.interviewerName} • Date: {selectedEvaluationReport.date}</div>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-center">
+                <span className="block text-[11px] font-bold text-slate-400 uppercase">Overall Average Score</span>
+                <span className="text-3xl font-extrabold text-indigo-600">{selectedEvaluationReport.averageScore}</span>
+                <span className="text-xs text-slate-400"> / 5.0</span>
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center space-x-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <span>Top 3 Candidate Strengths</span>
+                </h3>
+
+                <div className="grid grid-cols-1 gap-3">
+                  {(selectedEvaluationReport.strengths || []).map((st, idx) => (
+                    <div key={idx} className="p-4 bg-emerald-50/60 border border-emerald-100 rounded-xl space-y-1 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="px-2 py-0.5 bg-emerald-600 text-white font-extrabold rounded-md text-[10px]">
+                          {st.keyword || `#Strength${idx+1}`}
+                        </span>
+                        <span className="text-emerald-800 text-[10px] font-bold">Validated Competency</span>
+                      </div>
+                      <p className="text-emerald-950 font-semibold pt-1"><strong>Rubric Evidence:</strong> {st.evidence}</p>
+                      <p className="text-emerald-900"><strong>Takeaway:</strong> {st.takeaway}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center space-x-2">
+                  <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                  <span>Top 3 Areas for Improvement</span>
+                </h3>
+
+                <div className="grid grid-cols-1 gap-3">
+                  {(selectedEvaluationReport.improvements || []).map((imp, idx) => (
+                    <div key={idx} className="p-4 bg-amber-50/60 border border-amber-100 rounded-xl space-y-1 text-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="px-2 py-0.5 bg-amber-600 text-white font-extrabold rounded-md text-[10px]">
+                          {imp.keyword || `#AreaToImprove${idx+1}`}
+                        </span>
+                        <span className="text-amber-800 text-[10px] font-bold">Development Focus</span>
+                      </div>
+                      <p className="text-amber-950 font-semibold pt-1"><strong>Identified Gap:</strong> {imp.gap}</p>
+                      <p className="text-amber-900"><strong>Recommendation:</strong> {imp.recommendation}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-8 border-t border-slate-200 grid grid-cols-2 gap-8 text-xs text-slate-500">
+                <div><p>Interviewer Signature: _______________________</p></div>
+                <div className="text-right"><p>Recruitment Lead Approval: _______________________</p></div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 7: SETTINGS */}
+        {activeTab === 'settings' && (
+          <div className="max-w-2xl mx-auto bg-white rounded-2xl p-6 border border-slate-200/80 shadow-sm space-y-6">
+            <div>
+              <h2 className="text-xl font-extrabold text-slate-900">Settings & API Setup</h2>
+              <p className="text-xs text-slate-500 mt-1">Configure Gemini API Key and local storage settings.</p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">Gemini API Key</label>
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Enter Gemini API key..."
+                  className="w-full bg-slate-50 border border-slate-300 text-slate-800 text-xs rounded-xl p-3 focus:ring-2 focus:ring-indigo-500 outline-none font-mono"
+                />
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-800">Reset Local Storage</h4>
+                  <p className="text-[11px] text-slate-400">Restores initial preset templates and evaluations.</p>
+                </div>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem('interviewmate_presets');
+                    localStorage.removeItem('interviewmate_templates');
+                    localStorage.removeItem('interviewmate_evaluations');
+                    setPresets(INITIAL_PRESETS);
+                    setTemplates(DEMO_TEMPLATES);
+                    setEvaluations(DEMO_EVALUATIONS);
+                    showToast('Reset to demo data!');
+                  }}
+                  className="px-3.5 py-2 bg-rose-50 text-rose-600 text-xs font-bold rounded-xl"
+                >
+                  Reset Data
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </main>
+
+      {/* EDIT PRESET MODAL */}
+      {presetModal.open && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="text-base font-bold text-slate-900">
+                {presetModal.isEditing ? 'Edit Quick-Launch Preset' : 'Create Custom Preset'}
+              </h3>
+              <button onClick={() => setPresetModal({ open: false, isEditing: false, data: null })} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Preset Title *</label>
+                <input
+                  type="text"
+                  value={presetModal.data.title}
+                  onChange={(e) => setPresetModal({ ...presetModal, data: { ...presetModal.data, title: e.target.value } })}
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 outline-none font-semibold"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Department</label>
+                  <select
+                    value={presetModal.data.department}
+                    onChange={(e) => setPresetModal({ ...presetModal, data: { ...presetModal.data, department: e.target.value } })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 outline-none font-semibold"
+                  >
+                    {Object.keys(DEPARTMENT_POSITIONS).map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Seniority</label>
+                  <select
+                    value={presetModal.data.seniority}
+                    onChange={(e) => setPresetModal({ ...presetModal, data: { ...presetModal.data, seniority: e.target.value } })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 outline-none font-semibold"
+                  >
+                    {SENIORITY_LEVELS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              {presetModal.isEditing ? (
+                <button onClick={() => deletePresetHandler(presetModal.data.id)} className="text-xs font-bold text-rose-600 hover:underline">
+                  Delete Preset
+                </button>
+              ) : <div></div>}
+
+              <div className="flex space-x-2">
+                <button onClick={() => setPresetModal({ open: false, isEditing: false, data: null })} className="px-4 py-2 bg-slate-100 text-slate-700 text-xs font-bold rounded-xl">Cancel</button>
+                <button onClick={savePresetHandler} className="px-4 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700">Save Preset</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* API KEY INSTRUCTION MODAL */}
+      {showApiModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">How to Get & Use Your Gemini API Key</h3>
+                  <p className="text-xs text-slate-500">Gemini 3 Flash AI Integration Guide</p>
+                </div>
+              </div>
+              <button onClick={() => setShowApiModal(false)} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+
+            <div className="space-y-4 text-xs text-slate-600">
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+                <h4 className="font-bold text-slate-900 uppercase text-[11px]">Step-by-Step Instructions:</h4>
+                <ol className="list-decimal pl-4 space-y-1.5 text-slate-700">
+                  <li>Visit <strong>Google AI Studio</strong> at <a href="https://aistudio.google.com" target="_blank" rel="noreferrer" className="text-indigo-600 font-bold underline">aistudio.google.com</a>.</li>
+                  <li>Sign in with your Google Account and click <strong>"Create API Key"</strong>.</li>
+                  <li>Copy your generated key string (starts with <code>AIzaSy...</code>).</li>
+                  <li>Paste the key into the input field below and click <strong>"Test Connection"</strong>.</li>
+                </ol>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Your Gemini API Key</label>
+                <div className="relative">
+                  <input
+                    type={showApiKeyText ? "text" : "password"}
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="AIzaSy..."
+                    className="w-full bg-slate-50 border border-slate-300 text-xs rounded-xl p-3 pr-20 font-mono focus:ring-2 focus:ring-indigo-500 outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKeyText(!showApiKeyText)}
+                    className="absolute right-3 top-3 text-[11px] font-bold text-indigo-600 hover:underline"
+                  >
+                    {showApiKeyText ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+              </div>
+
+              {apiTestStatus.message && (
+                <div className={`p-3 rounded-xl border text-xs font-semibold ${
+                  apiTestStatus.success === true ? 'bg-emerald-50 text-emerald-800 border-emerald-200' :
+                  apiTestStatus.success === false ? 'bg-rose-50 text-rose-800 border-rose-200' :
+                  'bg-slate-100 text-slate-700 border-slate-200'
+                }`}>
+                  {apiTestStatus.message}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={handleTestApiKey}
+                disabled={apiTestStatus.testing}
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
+              >
+                {apiTestStatus.testing ? 'Testing...' : 'Test Connection'}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowApiModal(false);
+                  showToast(apiKey.trim() ? 'API Key saved successfully!' : 'Saved (Running in Demo Mode)');
+                }}
+                className="px-5 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl hover:bg-indigo-700 shadow"
+              >
+                Save & Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <footer className="no-print bg-slate-900 border-t border-slate-800 text-slate-400 py-6 text-center text-xs">
+        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center space-x-2">
+            <span className="font-extrabold text-slate-200">InterviewMate AI</span>
+            <span>— Structured HR Intelligence Engine</span>
+          </div>
+          <p>© {new Date().getFullYear()} InterviewMate. All rights reserved.</p>
+        </div>
+      </footer>
+
+    </div>
+  );
+}

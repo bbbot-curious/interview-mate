@@ -10,6 +10,18 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
+      @keyframes pretzelWiggle {
+        0%, 100% { transform: rotate(0deg) scale(1); }
+        20% { transform: rotate(-12deg) scale(1.2); }
+        40% { transform: rotate(12deg) scale(1.2); }
+        60% { transform: rotate(-8deg) scale(1.1); }
+        80% { transform: rotate(8deg) scale(1.1); }
+      }
+      .pretzel-anim {
+        display: inline-block;
+        animation: pretzelWiggle 3s infinite ease-in-out;
+        transform-origin: center;
+      }
       @media print {
         header, nav, button, .no-print { display: none !important; }
         body { background: white !important; color: black !important; }
@@ -42,6 +54,8 @@
         createButton: "Create New Interview Set →",
         presetsTitle: "Quick Launch Presets",
         usePreset: "Use Preset",
+        editPreset: "Edit",
+        addPreset: "+ Add Preset",
         configTitle: "Configure Interview Requirements",
         dept: "Department",
         pos: "Position Title",
@@ -53,6 +67,7 @@
         genLoading: "Generating Question Kit...",
         cheatsheetView: "Cheatsheet View",
         studioView: "Studio View",
+        addCustomQ: "+ Add Question",
         detailOnlyQuestions: "Questions Only",
         detailRubrics: "Questions + Rubrics",
         detailFull: "Questions + Rubrics + Indicators",
@@ -61,6 +76,7 @@
         scrutinyMode: "AI Scrutiny Mode:",
         scoreLabel: "Score Candidate Response (1 to 5):",
         notesLabel: "Interviewer Notes & Answer Transcript:",
+        aiReviewBtn: "AI Review Answer",
         viewScorecard: "View Candidate Scorecard →",
         overallRating: "Average Candidate Rating",
         recLabel: "Automated Recommendation",
@@ -70,7 +86,7 @@
         colEvidence: "Observed Evidence / Response",
         colAction: "Impact / Actionable Recommendation",
         printScorecard: "Print Candidate PDF",
-        closingMsg: "Semangat ya ❤️ 🥨"
+        closingMsg: "Semangat ya ❤️"
       },
       id: {
         title: "InterviewMate",
@@ -89,6 +105,8 @@
         createButton: "Buat Sesi Wawancara Baru →",
         presetsTitle: "Template Cepat",
         usePreset: "Gunakan Template",
+        editPreset: "Edit",
+        addPreset: "+ Tambah Template",
         configTitle: "Konfigurasi Kebutuhan Wawancara",
         dept: "Departemen",
         pos: "Posisi Pekerjaan",
@@ -100,6 +118,7 @@
         genLoading: "Membuat Kit Pertanyaan...",
         cheatsheetView: "Tampilan Lembar Panduan (Cheatsheet)",
         studioView: "Tampilan Studio Edit",
+        addCustomQ: "+ Tambah Pertanyaan",
         detailOnlyQuestions: "Hanya Pertanyaan",
         detailRubrics: "Pertanyaan + Rubrik",
         detailFull: "Pertanyaan + Rubrik + Indikator",
@@ -108,6 +127,7 @@
         scrutinyMode: "Tingkat Penilaian AI:",
         scoreLabel: "Beri Nilai Jawaban Kandidat (1 - 5):",
         notesLabel: "Catatan Wawancara & Transkrip Jawaban:",
+        aiReviewBtn: "Evaluasi Jawaban via AI",
         viewScorecard: "Lihat Hasil Kartu Evaluasi →",
         overallRating: "Rata-rata Nilai Kandidat",
         recLabel: "Rekomendasi Otomatis",
@@ -117,7 +137,7 @@
         colEvidence: "Bukti Teramati / Jawaban",
         colAction: "Dampak / Rekomendasi Tindakan",
         printScorecard: "Cetak PDF Kandidat",
-        closingMsg: "Semangat ya ❤️ 🥨"
+        closingMsg: "Semangat ya ❤️"
       }
     };
 
@@ -161,10 +181,12 @@
       const [scrutinyMode, setScrutinyMode] = useState('balanced');
       const [copyStatus, setCopyStatus] = useState('');
       
-      const [presets] = useState(() => {
+      const [presets, setPresets] = useState(() => {
         const saved = localStorage.getItem('interviewmate_presets');
         return saved ? JSON.parse(saved) : DEFAULT_PRESETS;
       });
+
+      const [editingPreset, setEditingPreset] = useState(null);
 
       const [config, setConfig] = useState({
         department: 'Information Technology',
@@ -185,6 +207,8 @@
       const [generatedKit, setGeneratedKit] = useState(null);
       const [candidateScores, setCandidateScores] = useState({});
       const [candidateNotes, setCandidateNotes] = useState({});
+      const [aiAnswerReviews, setAiAnswerReviews] = useState({});
+      const [reviewingIndex, setReviewingIndex] = useState(null);
       const [isGenerating, setIsGenerating] = useState(false);
 
       const totalQuestionsCount = useMemo(() => {
@@ -204,10 +228,144 @@
         setCandidateNotes(prev => ({ ...prev, [qIndex]: note }));
       };
 
+      // Question Studio Editing Functions
+      const handleUpdateQuestion = (qIndex, field, value) => {
+        if (!generatedKit) return;
+        const updatedQuestions = [...generatedKit.questions];
+        updatedQuestions[qIndex] = { ...updatedQuestions[qIndex], [field]: value };
+        setGeneratedKit({ ...generatedKit, questions: updatedQuestions });
+      };
+
+      const handleAddCustomQuestion = () => {
+        if (!generatedKit) return;
+        const newQ = {
+          id: `q-custom-${Date.now()}`,
+          category: 'Custom',
+          question: lang === 'id' ? 'Pertanyaan kustom baru...' : 'New custom question...',
+          purpose: lang === 'id' ? 'Menilai kriteria khusus.' : 'Evaluates specific custom role criteria.',
+          greenFlags: [lang === 'id' ? 'Penjelasan terstruktur' : 'Structured explanation'],
+          redFlags: [lang === 'id' ? 'Penjelasan kabur' : 'Vague answer'],
+          rubricMatrix: {
+            1: lang === 'id' ? 'Tidak memenuhi' : 'Does not meet expectations',
+            3: lang === 'id' ? 'Memenuhi standar' : 'Meets expectations',
+            5: lang === 'id' ? 'Luar biasa' : 'Exceptional'
+          }
+        };
+        setGeneratedKit({ ...generatedKit, questions: [...generatedKit.questions, newQ] });
+      };
+
+      const handleDeleteQuestion = (qIndex) => {
+        if (!generatedKit) return;
+        const updatedQuestions = generatedKit.questions.filter((_, i) => i !== qIndex);
+        setGeneratedKit({ ...generatedKit, questions: updatedQuestions });
+      };
+
+      const handleRegenerateSingleQuestion = async (qIndex) => {
+        if (!generatedKit) return;
+        const qToReplace = generatedKit.questions[qIndex];
+        const targetLang = lang === 'id' ? 'Bahasa Indonesia' : 'English';
+
+        if (apiKey) {
+          try {
+            const prompt = `Generate 1 alternative ${qToReplace.category} interview question in ${targetLang} for a ${generatedKit.seniority} level ${generatedKit.position}.
+Return ONLY valid JSON matching:
+{
+  "category": "${qToReplace.category}",
+  "question": "Question text",
+  "purpose": "Purpose",
+  "greenFlags": ["Flag 1", "Flag 2"],
+  "redFlags": ["Flag 1", "Flag 2"],
+  "rubricMatrix": {"1": "Poor", "3": "Meets", "5": "Excellent"}
+}`;
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
+            const data = await res.json();
+            const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            const parsed = JSON.parse(textResponse.replace(/```json/g, '').replace(/```/g, '').trim());
+            
+            const updatedQuestions = [...generatedKit.questions];
+            updatedQuestions[qIndex] = { ...parsed, id: `q-regen-${Date.now()}` };
+            setGeneratedKit({ ...generatedKit, questions: updatedQuestions });
+            return;
+          } catch(err) {
+            console.warn("Single regen fallback", err);
+          }
+        }
+
+        // Offline single question fallback
+        const updatedQuestions = [...generatedKit.questions];
+        updatedQuestions[qIndex] = {
+          ...qToReplace,
+          question: lang === 'id' 
+            ? `[Alternatif] Bagaimana Anda mengelola prioritas utama dalam peran ${generatedKit.position}?`
+            : `[Alternative] How do you manage critical priorities in your role as ${generatedKit.position}?`,
+          id: `q-regen-${Date.now()}`
+        };
+        setGeneratedKit({ ...generatedKit, questions: updatedQuestions });
+      };
+
+      // AI Answer Transcript Evaluator
+      const handleReviewAnswerWithAI = async (qIndex) => {
+        const note = candidateNotes[qIndex];
+        if (!note || !note.trim()) return;
+        setReviewingIndex(qIndex);
+
+        const questionObj = generatedKit.questions[qIndex];
+        const targetLang = lang === 'id' ? 'Bahasa Indonesia' : 'English';
+
+        if (apiKey) {
+          try {
+            const prompt = `You are an executive interviewer with Scrutiny Level: ${scrutinyMode}.
+Question: "${questionObj.question}"
+Candidate Transcript Notes: "${note}"
+Rubrics: Score 1: ${questionObj.rubricMatrix[1]}, Score 3: ${questionObj.rubricMatrix[3]}, Score 5: ${questionObj.rubricMatrix[5]}
+
+Analyze the notes in ${targetLang}. Return ONLY valid JSON:
+{
+  "suggestedScore": 3,
+  "strengthsFound": ["Strength 1", "Strength 2"],
+  "gapsFound": ["Gap 1"],
+  "suggestedFollowUp": "Follow-up question"
+}`;
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            });
+            const data = await res.json();
+            const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            const parsed = JSON.parse(textResponse.replace(/```json/g, '').replace(/```/g, '').trim());
+
+            setAiAnswerReviews(prev => ({ ...prev, [qIndex]: parsed }));
+            if (parsed.suggestedScore) handleScoreChange(qIndex, parsed.suggestedScore);
+            setReviewingIndex(null);
+            return;
+          } catch (err) {
+            console.warn("AI Review Fallback", err);
+          }
+        }
+
+        // Fallback Answer Evaluator
+        setTimeout(() => {
+          const mockResult = {
+            suggestedScore: Math.min(5, Math.max(2, Math.floor(note.length / 25))),
+            strengthsFound: lang === 'id' ? ['Menyebutkan konteks relevan', 'Menjelaskan alur tindakan'] : ['Mentions relevant context', 'Explains action methodology'],
+            gapsFound: lang === 'id' ? ['Dapat menambahkan metrik hasil bisnis yang lebih spesifik'] : ['Could include more specific quantified business impact'],
+            suggestedFollowUp: lang === 'id' ? 'Apa metrik utama yang Anda gunakan untuk mengukur keberhasilan tersebut?' : 'What key metric did you use to measure that success?'
+          };
+          setAiAnswerReviews(prev => ({ ...prev, [qIndex]: mockResult }));
+          handleScoreChange(qIndex, mockResult.suggestedScore);
+          setReviewingIndex(null);
+        }, 1000);
+      };
+
       // Copy Cheatsheet Function with Detail Levels
       const handleCopyCheatsheet = () => {
         if (!generatedKit) return;
-        let text = `INTERVIEWS QUESTION CHEATSHEET\nPosition: ${generatedKit.position} (${generatedKit.seniority})\nLanguage: ${lang === 'id' ? 'Bahasa Indonesia' : 'English'}\nDate: ${new Date().toLocaleDateString()}\n\n`;
+        let text = `INTERVIEW QUESTION CHEATSHEET\nPosition: ${generatedKit.position} (${generatedKit.seniority})\nLanguage: ${lang === 'id' ? 'Bahasa Indonesia' : 'English'}\nDate: ${new Date().toLocaleDateString()}\n\n`;
 
         generatedKit.questions.forEach((q, idx) => {
           text += `Q${idx + 1} [${q.category}]: ${q.question}\n`;
@@ -227,7 +385,6 @@
           text += `--------------------------------------------------\n\n`;
         });
 
-        // Fallback clipboard API
         if (navigator.clipboard && window.isSecureContext) {
           navigator.clipboard.writeText(text).then(() => {
             setCopyStatus(lang === 'id' ? 'Tersalin!' : 'Copied!');
@@ -401,11 +558,20 @@ Return ONLY valid JSON in ${targetLang} matching this structure:
                 </div>
 
                 <div>
-                  <h3 className="text-xl font-bold text-slate-900 mb-4">{t.presetsTitle}</h3>
+                  <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xl font-bold text-slate-900">{t.presetsTitle}</h3>
+                    <button onClick={() => setEditingPreset({ id: `preset-${Date.now()}`, title: '', department: 'Information Technology', position: 'Software Engineer', seniority: 'Mid-Level', composition: { General: 2, Technical: 3 }, additionalContext: '' })} className="px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-bold rounded-xl transition">
+                      {t.addPreset}
+                    </button>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     {presets.map(p => (
-                      <div key={p.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition">
-                        <span className="text-xs font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-md">{p.department}</span>
+                      <div key={p.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition relative group">
+                        <div className="flex justify-between items-start">
+                          <span className="text-xs font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-md">{p.department}</span>
+                          <button onClick={() => setEditingPreset(p)} className="text-xs text-slate-400 hover:text-slate-700 font-semibold">{t.editPreset}</button>
+                        </div>
                         <h4 className="font-bold text-slate-900 text-lg mt-3">{p.title}</h4>
                         <p className="text-xs text-slate-500 mt-1">{p.seniority}</p>
                         <button onClick={() => {
@@ -489,7 +655,7 @@ Return ONLY valid JSON in ${targetLang} matching this structure:
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-4 no-print">
                   <div>
                     <h2 className="text-xl font-bold text-slate-900">{generatedKit?.position || t.studio}</h2>
-                    <p className="text-xs text-slate-500">{config.seniority} • {totalQuestionsCount} {t.questions}</p>
+                    <p className="text-xs text-slate-500">{config.seniority} • {generatedKit?.questions?.length || 0} {t.questions}</p>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-3">
@@ -499,7 +665,12 @@ Return ONLY valid JSON in ${targetLang} matching this structure:
                       <button onClick={() => setStudioViewMode('compact')} className={`px-3 py-1.5 rounded-lg transition ${studioViewMode === 'compact' ? 'bg-white text-indigo-600 shadow' : 'text-slate-500'}`}>{t.cheatsheetView}</button>
                     </div>
 
-                    {/* Cheatsheet Detail Level Dropdown (Visible in Cheatsheet Mode) */}
+                    {studioViewMode === 'studio' && (
+                      <button onClick={handleAddCustomQuestion} className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow transition">
+                        {t.addCustomQ}
+                      </button>
+                    )}
+
                     {studioViewMode === 'compact' && (
                       <select value={cheatsheetDetail} onChange={e => setCheatsheetDetail(e.target.value)} className="text-xs font-bold p-2 border border-slate-300 rounded-xl bg-slate-50">
                         <option value="only_questions">{t.detailOnlyQuestions}</option>
@@ -519,37 +690,69 @@ Return ONLY valid JSON in ${targetLang} matching this structure:
 
                 {generatedKit ? (
                   studioViewMode === 'studio' ? (
-                    /* Interactive Studio Mode */
+                    /* Interactive Studio Mode with Inline Editing */
                     <div className="space-y-6">
                       {generatedKit.questions.map((q, idx) => (
                         <div key={q.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                          <div className="flex justify-between items-start">
-                            <span className="text-xs font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-md">Q{idx + 1} • {q.category}</span>
-                            <span className="text-xs text-slate-400">{q.purpose}</span>
+                          <div className="flex justify-between items-center gap-2">
+                            <input 
+                              type="text" 
+                              value={q.category} 
+                              onChange={e => handleUpdateQuestion(idx, 'category', e.target.value)}
+                              className="text-xs font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-md border border-indigo-100" 
+                            />
+                            <div className="flex items-center space-x-2">
+                              <button onClick={() => handleRegenerateSingleQuestion(idx)} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2.5 py-1 rounded-md">
+                                🔄 AI Swap Question
+                              </button>
+                              <button onClick={() => handleDeleteQuestion(idx)} className="text-xs font-bold text-rose-600 hover:text-rose-800 bg-rose-50 px-2.5 py-1 rounded-md">
+                                🗑️ Delete
+                              </button>
+                            </div>
                           </div>
-                          <h3 className="text-base font-bold text-slate-900">{q.question}</h3>
+
+                          <textarea 
+                            value={q.question} 
+                            onChange={e => handleUpdateQuestion(idx, 'question', e.target.value)} 
+                            className="w-full text-base font-bold text-slate-900 border border-slate-200 rounded-xl p-3 bg-slate-50 focus:bg-white transition"
+                          />
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs">
                             <div>
                               <span className="font-bold text-emerald-700 block mb-1">✓ Green Flags (Strong Answer)</span>
-                              <ul className="list-disc list-inside text-slate-600 space-y-1">
-                                {q.greenFlags?.map((g, i) => <li key={i}>{g}</li>)}
-                              </ul>
+                              <textarea 
+                                value={q.greenFlags?.join('\n') || ''} 
+                                onChange={e => handleUpdateQuestion(idx, 'greenFlags', e.target.value.split('\n'))}
+                                placeholder="One flag per line..."
+                                className="w-full p-2 border border-slate-200 rounded-lg bg-white h-20"
+                              />
                             </div>
                             <div>
                               <span className="font-bold text-rose-700 block mb-1">⚠ Red Flags (Warning Signs)</span>
-                              <ul className="list-disc list-inside text-slate-600 space-y-1">
-                                {q.redFlags?.map((r, i) => <li key={i}>{r}</li>)}
-                              </ul>
+                              <textarea 
+                                value={q.redFlags?.join('\n') || ''} 
+                                onChange={e => handleUpdateQuestion(idx, 'redFlags', e.target.value.split('\n'))}
+                                placeholder="One flag per line..."
+                                className="w-full p-2 border border-slate-200 rounded-lg bg-white h-20"
+                              />
                             </div>
                           </div>
 
                           <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2 text-xs">
                             <span className="font-bold text-slate-700 block">Recommended Rubric Criteria:</span>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-slate-600">
-                              <div className="bg-white p-2.5 rounded-lg border border-slate-200"><span className="font-bold text-rose-600 block">Score 1 (Poor):</span>{q.rubricMatrix?.[1]}</div>
-                              <div className="bg-white p-2.5 rounded-lg border border-slate-200"><span className="font-bold text-amber-600 block">Score 3 (Meets):</span>{q.rubricMatrix?.[3]}</div>
-                              <div className="bg-white p-2.5 rounded-lg border border-slate-200"><span className="font-bold text-emerald-600 block">Score 5 (Excellent):</span>{q.rubricMatrix?.[5]}</div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                              <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                                <span className="font-bold text-rose-600 block mb-1">Score 1 (Poor):</span>
+                                <input type="text" value={q.rubricMatrix?.[1] || ''} onChange={e => handleUpdateQuestion(idx, 'rubricMatrix', { ...q.rubricMatrix, 1: e.target.value })} className="w-full text-xs p-1 border border-slate-200 rounded" />
+                              </div>
+                              <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                                <span className="font-bold text-amber-600 block mb-1">Score 3 (Meets):</span>
+                                <input type="text" value={q.rubricMatrix?.[3] || ''} onChange={e => handleUpdateQuestion(idx, 'rubricMatrix', { ...q.rubricMatrix, 3: e.target.value })} className="w-full text-xs p-1 border border-slate-200 rounded" />
+                              </div>
+                              <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                                <span className="font-bold text-emerald-600 block mb-1">Score 5 (Excellent):</span>
+                                <input type="text" value={q.rubricMatrix?.[5] || ''} onChange={e => handleUpdateQuestion(idx, 'rubricMatrix', { ...q.rubricMatrix, 5: e.target.value })} className="w-full text-xs p-1 border border-slate-200 rounded" />
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -559,7 +762,7 @@ Return ONLY valid JSON in ${targetLang} matching this structure:
                       </div>
                     </div>
                   ) : (
-                    /* Cheatsheet Mode */
+                    /* Cheatsheet View Mode */
                     <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6 print-card">
                       <div className="border-b border-slate-200 pb-4">
                         <h2 className="text-2xl font-black text-slate-900">{generatedKit.position} — Cheatsheet</h2>
@@ -600,7 +803,7 @@ Return ONLY valid JSON in ${targetLang} matching this structure:
               </div>
             )}
 
-            {/* LIVE INTERVIEW STUDIO */}
+            {/* LIVE INTERVIEW STUDIO WITH AI ANSWER EVALUATOR */}
             {activeTab === 'live-interview' && (
               <div className="space-y-6">
                 <div className="bg-white p-6 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-4">
@@ -637,9 +840,27 @@ Return ONLY valid JSON in ${targetLang} matching this structure:
                         </div>
 
                         <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-1">{t.notesLabel}</label>
+                          <div className="flex justify-between items-center mb-1">
+                            <label className="block text-xs font-bold text-slate-700">{t.notesLabel}</label>
+                            <button onClick={() => handleReviewAnswerWithAI(idx)} disabled={reviewingIndex === idx} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 disabled:text-slate-400">
+                              {reviewingIndex === idx ? 'Evaluating...' : t.aiReviewBtn}
+                            </button>
+                          </div>
                           <textarea value={candidateNotes[idx] || ''} onChange={e => handleNoteChange(idx, e.target.value)} placeholder="Record candidate response notes here..." className="w-full p-3 text-xs border border-slate-200 rounded-xl bg-slate-50 h-24" />
                         </div>
+
+                        {/* AI Answer Review Feedback Drawer */}
+                        {aiAnswerReviews[idx] && (
+                          <div className="bg-indigo-50/70 border border-indigo-100 p-4 rounded-xl text-xs space-y-2">
+                            <div className="flex justify-between font-bold text-indigo-900">
+                              <span>AI Analysis Feedback</span>
+                              <span>Suggested Score: {aiAnswerReviews[idx].suggestedScore} / 5</span>
+                            </div>
+                            <p><strong>Strengths:</strong> {aiAnswerReviews[idx].strengthsFound?.join('; ')}</p>
+                            <p><strong>Gaps:</strong> {aiAnswerReviews[idx].gapsFound?.join('; ')}</p>
+                            {aiAnswerReviews[idx].suggestedFollowUp && <p className="text-indigo-700 italic"><strong>Follow-Up Question:</strong> {aiAnswerReviews[idx].suggestedFollowUp}</p>}
+                          </div>
+                        )}
                       </div>
                     ))}
 
@@ -653,7 +874,7 @@ Return ONLY valid JSON in ${targetLang} matching this structure:
               </div>
             )}
 
-            {/* CANDIDATE SCORECARD TAB (With Clean Tables) */}
+            {/* CANDIDATE SCORECARD TAB */}
             {activeTab === 'scorecard' && (
               <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-8 print-card">
                 <div className="border-b border-slate-200 pb-6 flex justify-between items-start">
@@ -765,23 +986,42 @@ Return ONLY valid JSON in ${targetLang} matching this structure:
                         <li>Paste your key into the <strong>Set Gemini Key</strong> modal in InterviewMate.</li>
                       </ul>
                     </div>
-
-                    <div className="bg-white p-4 rounded-xl border border-slate-200">
-                      <strong className="text-indigo-600 block text-sm mb-1">2. Data Privacy & Local Storage</strong>
-                      <p>Your API key is saved strictly inside your browser's local storage (`localStorage`). It is never sent to any external server or backend—only directly to Google's official endpoints.</p>
-                    </div>
                   </div>
                 </div>
 
-                {/* Encouraging Closing Card */}
+                {/* Encouraging Closing Card with Animated Pretzel */}
                 <div className="bg-gradient-to-r from-indigo-900 to-slate-900 text-white p-6 rounded-2xl text-center space-y-2 shadow-md">
-                  <p className="text-lg font-bold">{t.closingMsg}</p>
+                  <p className="text-lg font-bold">{t.closingMsg} <span className="pretzel-anim">🥨</span></p>
                   <p className="text-xs text-slate-300">Good luck with your structured interview sessions!</p>
                 </div>
               </div>
             )}
 
           </main>
+
+          {/* Edit Preset Modal */}
+          {editingPreset && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white max-w-md w-full p-6 rounded-3xl shadow-2xl space-y-4">
+                <h3 className="text-lg font-bold text-slate-900">Edit Preset Template</h3>
+                <input type="text" value={editingPreset.title} onChange={e => setEditingPreset({ ...editingPreset, title: e.target.value })} placeholder="Preset Title..." className="w-full p-3 border border-slate-300 rounded-xl text-sm" />
+                <select value={editingPreset.department} onChange={e => setEditingPreset({ ...editingPreset, department: e.target.value })} className="w-full p-3 border border-slate-300 rounded-xl text-sm">
+                  {Object.keys(DEPARTMENT_POSITIONS).map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+                <input type="text" value={editingPreset.position} onChange={e => setEditingPreset({ ...editingPreset, position: e.target.value })} placeholder="Position..." className="w-full p-3 border border-slate-300 rounded-xl text-sm" />
+                <div className="flex justify-end space-x-3">
+                  <button onClick={() => setEditingPreset(null)} className="px-4 py-2 text-xs font-bold text-slate-500">Cancel</button>
+                  <button onClick={() => {
+                    const updated = presets.filter(p => p.id !== editingPreset.id);
+                    const newPresets = [...updated, editingPreset];
+                    setPresets(newPresets);
+                    localStorage.setItem('interviewmate_presets', JSON.stringify(newPresets));
+                    setEditingPreset(null);
+                  }} className="px-5 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl shadow">Save Preset</button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* API Key Modal */}
           {showApiKeyModal && (

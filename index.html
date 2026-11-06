@@ -103,7 +103,7 @@
       const [reviewingIndex, setReviewingIndex] = useState(null);
       const [isGenerating, setIsGenerating] = useState(false);
 
-      // Max 10 questions composition calculation
+      // Total composition ceiling (10 max)
       const totalQuestionsCount = useMemo(() => {
         return Object.values(config.composition).reduce((a, b) => a + Number(b), 0);
       }, [config.composition]);
@@ -114,7 +114,6 @@
           .filter(([k]) => k !== type)
           .reduce((sum, [_, count]) => sum + Number(count), 0);
         
-        // Cap total at 10 max
         const allowedVal = Math.min(parsedVal, 10 - currentOthersTotal);
         setConfig(prev => ({
           ...prev,
@@ -192,8 +191,10 @@ Return ONLY valid JSON matching:
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
             });
+            if (!res.ok) throw new Error(`API HTTP status ${res.status}`);
             const data = await res.json();
             const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!textResponse) throw new Error("Invalid API payload");
             const parsed = JSON.parse(textResponse.replace(/```json/g, '').replace(/```/g, '').trim());
             
             const updatedQuestions = [...generatedKit.questions];
@@ -243,8 +244,10 @@ Analyze the notes in ${targetLangStr}. Return ONLY valid JSON:
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
             });
+            if (!res.ok) throw new Error(`API HTTP status ${res.status}`);
             const data = await res.json();
             const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!textResponse) throw new Error("Invalid API payload");
             const parsed = JSON.parse(textResponse.replace(/```json/g, '').replace(/```/g, '').trim());
 
             setAiAnswerReviews(prev => ({ ...prev, [qIndex]: parsed }));
@@ -324,6 +327,11 @@ Analyze the notes in ${targetLangStr}. Return ONLY valid JSON:
 
       const generateInterviewQuestions = async () => {
         setIsGenerating(true);
+        // Clean previous session evaluations
+        setCandidateScores({});
+        setCandidateNotes({});
+        setAiAnswerReviews({});
+
         const targetPosition = config.department === 'Other / Custom' ? (config.customPosition || 'Custom Role') : config.position;
         const targetLangStr = outputLang === 'id' ? 'Bahasa Indonesia' : 'English';
         
@@ -363,8 +371,11 @@ Return ONLY valid JSON in ${targetLangStr} matching:
               body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
             });
 
+            if (!res.ok) throw new Error(`API HTTP status ${res.status}`);
             const data = await res.json();
             const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (!textResponse) throw new Error("Invalid API payload format");
+            
             const cleanedJson = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
             const parsed = JSON.parse(cleanedJson);
 
@@ -381,7 +392,7 @@ Return ONLY valid JSON in ${targetLangStr} matching:
           }
         }
 
-        // Offline Fallback
+        // Offline Fallback Generator
         setTimeout(() => {
           const generatedQuestions = [];
           Object.entries(config.composition).forEach(([type, count]) => {
@@ -849,7 +860,7 @@ Return ONLY valid JSON in ${targetLangStr} matching:
                 <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-8 print-card">
                   <div className="border-b border-slate-200 pb-6 flex justify-between items-start">
                     <div>
-                      <h2 className="text-2xl font-black text-slate-900">{config.position} — Scorecard</h2>
+                      <h2 className="text-2xl font-black text-slate-900">{generatedKit ? generatedKit.position : config.position} — Scorecard</h2>
                       <p className="text-xs text-slate-500 mt-1">{config.seniority}</p>
                     </div>
                     <div className="text-right">

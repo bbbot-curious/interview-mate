@@ -135,6 +135,129 @@
       }
     };
 
+    // Universal AI Provider API Fetch Helper
+    async function callAIProvider(prompt, apiKey, systemInstruction = "You are an expert HR interviewer.") {
+      const cleanKey = apiKey ? apiKey.trim() : "";
+      if (!cleanKey) {
+        throw new Error("No API key provided. Please click 'Set API Key' in the top right.");
+      }
+
+      let textResult = "";
+
+      // Provider 1: Groq Cloud (keys start with gsk_)
+      if (cleanKey.startsWith("gsk_")) {
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${cleanKey}`
+          },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            messages: [
+              { role: "system", content: systemInstruction },
+              { role: "user", content: prompt }
+            ],
+            response_format: { type: "json_object" }
+          })
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(`Groq API Error (${res.status}): ${errData.error?.message || res.statusText}`);
+        }
+        const data = await res.json();
+        textResult = data.choices?.[0]?.message?.content;
+      }
+      // Provider 2: OpenRouter (keys start with sk-or-)
+      else if (cleanKey.startsWith("sk-or-")) {
+        const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${cleanKey}`
+          },
+          body: JSON.stringify({
+            model: "meta-llama/llama-3.3-70b-instruct:free",
+            messages: [
+              { role: "system", content: systemInstruction },
+              { role: "user", content: prompt }
+            ],
+            response_format: { type: "json_object" }
+          })
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(`OpenRouter API Error (${res.status}): ${errData.error?.message || res.statusText}`);
+        }
+        const data = await res.json();
+        textResult = data.choices?.[0]?.message?.content;
+      }
+      // Provider 3: OpenAI (keys start with sk- and not sk-or-)
+      else if (cleanKey.startsWith("sk-")) {
+        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${cleanKey}`
+          },
+          body: JSON.stringify({
+            model: "gpt-4o-mini",
+            messages: [
+              { role: "system", content: systemInstruction },
+              { role: "user", content: prompt }
+            ],
+            response_format: { type: "json_object" }
+          })
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(`OpenAI API Error (${res.status}): ${errData.error?.message || res.statusText}`);
+        }
+        const data = await res.json();
+        textResult = data.choices?.[0]?.message?.content;
+      }
+      // Provider 4: Google Gemini REST API (AIza... or default)
+      else {
+        const modelsToTry = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-2.5-flash"];
+        let lastError = null;
+
+        for (const model of modelsToTry) {
+          try {
+            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanKey}`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: `${systemInstruction}\n\n${prompt}` }] }],
+                generationConfig: { responseMimeType: "application/json" }
+              })
+            });
+
+            if (!res.ok) {
+              const errData = await res.json().catch(() => ({}));
+              throw new Error(`Gemini API (${model}) Error (${res.status}): ${errData.error?.message || res.statusText}`);
+            }
+
+            const data = await res.json();
+            textResult = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (textResult) break;
+          } catch (e) {
+            lastError = e;
+          }
+        }
+
+        if (!textResult) {
+          throw lastError || new Error("Failed to receive response from Google Gemini API.");
+        }
+      }
+
+      if (!textResult) throw new Error("Empty payload returned by AI provider.");
+      
+      // Robust JSON sanitation logic
+      let cleaned = textResult.trim();
+      cleaned = cleaned.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
+      return JSON.parse(cleaned);
+    }
+
     function App() {
       const [activeTab, setActiveTab] = useState('dashboard');
       const [outputLang, setOutputLang] = useState('en');
@@ -204,15 +327,15 @@
         setShowCatModal(true);
         setIsLoadingCat(true);
         try {
-          const res = await fetch('https://api.thecatapi.com/v1/images/search');
+          const res = await fetch('[https://api.thecatapi.com/v1/images/search](https://api.thecatapi.com/v1/images/search)');
           const data = await res.json();
           if (data && data[0] && data[0].url) {
             setCatImageUrl(data[0].url);
           } else {
-            setCatImageUrl(`https://cataas.com/cat?t=${Date.now()}`);
+            setCatImageUrl(`[https://cataas.com/cat?t=$](https://cataas.com/cat?t=$){Date.now()}`);
           }
         } catch (err) {
-          setCatImageUrl(`https://cataas.com/cat?t=${Date.now()}`);
+          setCatImageUrl(`[https://cataas.com/cat?t=$](https://cataas.com/cat?t=$){Date.now()}`);
         } finally {
           setIsLoadingCat(false);
         }
@@ -326,9 +449,7 @@
         const qToReplace = generatedKit.questions[qIndex];
         const targetLangStr = outputLang === 'id' ? 'Bahasa Indonesia' : 'English';
 
-        if (apiKey) {
-          try {
-            const prompt = `Generate 1 alternative ${qToReplace.category} interview question in ${targetLangStr} for a ${generatedKit.seniority} level ${generatedKit.position}. Ensure it is completely distinct.
+        const prompt = `Generate 1 alternative ${qToReplace.category} interview question in ${targetLangStr} for a ${generatedKit.seniority} level ${generatedKit.position}. Ensure it is completely distinct.
 Return ONLY raw JSON matching:
 {
   "category": "${qToReplace.category}",
@@ -338,26 +459,17 @@ Return ONLY raw JSON matching:
   "redFlags": ["Flag 1", "Flag 2"],
   "rubricMatrix": {"1": "Poor description", "3": "Meets expectations description", "5": "Excellent description"}
 }`;
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { responseMimeType: "application/json" }
-              })
-            });
-            if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-            const data = await res.json();
-            const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!textResponse) throw new Error("Empty response");
-            const parsed = JSON.parse(textResponse);
-            
+
+        if (apiKey && apiKey.trim()) {
+          try {
+            const parsed = await callAIProvider(prompt, apiKey, "You are an expert HR interviewer. Output ONLY valid JSON.");
             const updatedQuestions = [...generatedKit.questions];
             updatedQuestions[qIndex] = { ...parsed, id: `q-regen-${Date.now()}` };
             setGeneratedKit({ ...generatedKit, questions: updatedQuestions });
             return;
           } catch(err) {
-            console.warn("Single question regeneration fallback", err);
+            console.warn("Single question AI swap failed:", err);
+            alert(`AI Swap Error: ${err.message}`);
           }
         }
 
@@ -374,18 +486,19 @@ Return ONLY raw JSON matching:
 
       const handleReviewAnswerWithAI = async (qIndex) => {
         const note = candidateNotes[qIndex];
-        if (!note || !note.trim()) return;
+        if (!note || !note.trim()) {
+          alert('Please record transcript notes for this response before triggering AI review.');
+          return;
+        }
         setReviewingIndex(qIndex);
 
         const questionObj = generatedKit.questions[qIndex];
         const targetLangStr = outputLang === 'id' ? 'Bahasa Indonesia' : 'English';
 
-        if (apiKey) {
-          try {
-            const prompt = `You are an executive interviewer evaluating under Scrutiny Level: ${scrutinyMode}.
+        const prompt = `You are an executive interviewer evaluating under Scrutiny Level: ${scrutinyMode}.
 Question: "${questionObj.question}"
 Candidate Transcript Notes: "${note}"
-Rubrics: Score 1: ${questionObj.rubricMatrix[1]}, Score 3: ${questionObj.rubricMatrix[3]}, Score 5: ${questionObj.rubricMatrix[5]}
+Rubrics: Score 1: ${questionObj.rubricMatrix?.[1] || 'Poor'}, Score 3: ${questionObj.rubricMatrix?.[3] || 'Meets'}, Score 5: ${questionObj.rubricMatrix?.[5] || 'Exceptional'}
 
 Analyze in ${targetLangStr}. Return ONLY raw JSON:
 {
@@ -394,26 +507,19 @@ Analyze in ${targetLangStr}. Return ONLY raw JSON:
   "gapsFound": ["Gap 1"],
   "suggestedFollowUp": "Follow-up question"
 }`;
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: { responseMimeType: "application/json" }
-              })
-            });
-            if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-            const data = await res.json();
-            const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!textResponse) throw new Error("Empty response");
-            const parsed = JSON.parse(textResponse);
 
+        if (apiKey && apiKey.trim()) {
+          try {
+            const parsed = await callAIProvider(prompt, apiKey, "You are an executive interviewer. Output ONLY valid JSON.");
             setAiAnswerReviews(prev => ({ ...prev, [qIndex]: parsed }));
             if (parsed.suggestedScore) handleScoreChange(qIndex, parsed.suggestedScore);
             setReviewingIndex(null);
             return;
           } catch (err) {
-            console.warn("AI Review Fallback", err);
+            console.warn("AI Answer Review failed:", err);
+            alert(`AI Answer Review Error: ${err.message}`);
+            setReviewingIndex(null);
+            return;
           }
         }
 
@@ -427,7 +533,7 @@ Analyze in ${targetLangStr}. Return ONLY raw JSON:
           setAiAnswerReviews(prev => ({ ...prev, [qIndex]: mockResult }));
           handleScoreChange(qIndex, mockResult.suggestedScore);
           setReviewingIndex(null);
-        }, 1000);
+        }, 800);
       };
 
       const handleCopyCheatsheet = () => {
@@ -489,7 +595,6 @@ Analyze in ${targetLangStr}. Return ONLY raw JSON:
         alert('Candidate evaluation session saved to dashboard analytics!');
       };
 
-      // Task 1 Fix: Connected AI generation API fetch with loading state and error messaging
       const generateInterviewQuestions = async () => {
         setIsGenerating(true);
         setApiErrorMessage('');
@@ -509,10 +614,7 @@ Analyze in ${targetLangStr}. Return ONLY raw JSON:
           .map(([type, count]) => `${count} ${type} Questions`)
           .join(', ');
 
-        if (apiKey) {
-          try {
-            setApiStatusMessage('Connecting to AI API (Gemini 2.5 Flash)...');
-            const prompt = `Generate a structured interview question kit strictly in ${targetLangStr} for a ${config.seniority} level ${targetPosition} in ${config.department}.
+        const prompt = `Generate a structured interview question kit strictly in ${targetLangStr} for a ${config.seniority} level ${targetPosition} in ${config.department}.
 Composition requirement: ${compositionText} (Total ${totalQuestionsCount} questions, max 10).
 Additional Context: ${config.additionalContext || 'None'}
 
@@ -542,30 +644,13 @@ Return ONLY a raw JSON object with zero markdown wrapper:
   ]
 }`;
 
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: prompt }] }],
-                generationConfig: {
-                  responseMimeType: "application/json"
-                }
-              })
-            });
-
-            if (!res.ok) {
-              const errPayload = await res.json().catch(() => ({}));
-              const msg = errPayload.error?.message || `API HTTP Error ${res.status}`;
-              throw new Error(msg);
-            }
-
-            const data = await res.json();
-            const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!textResponse) throw new Error("AI provider returned empty content.");
-
-            const parsed = JSON.parse(textResponse);
+        if (apiKey && apiKey.trim()) {
+          try {
+            setApiStatusMessage('Connecting to AI API provider...');
+            const parsed = await callAIProvider(prompt, apiKey, "You are an expert HR interviewer. Output ONLY valid JSON.");
+            
             if (!parsed.questions || !Array.isArray(parsed.questions)) {
-              throw new Error("Invalid question kit format returned by AI.");
+              throw new Error("Invalid structure: 'questions' array missing from AI response.");
             }
 
             setGeneratedKit({
@@ -573,19 +658,19 @@ Return ONLY a raw JSON object with zero markdown wrapper:
               seniority: config.seniority,
               questions: parsed.questions.slice(0, 10)
             });
-            setApiStatusMessage('Successfully generated question set via Gemini AI API.');
+            setApiStatusMessage('Successfully generated question set via AI!');
             setActiveTab('studio');
             setIsGenerating(false);
             return;
           } catch (err) {
             console.error("AI Generation Failed:", err);
-            setApiErrorMessage(`AI Error: ${err.message}. Switched to offline generator.`);
+            setApiErrorMessage(`AI Error: ${err.message}`);
+            setIsGenerating(false);
+            return;
           }
-        } else {
-          setApiStatusMessage('No API Key set. Using built-in offline question generator.');
         }
 
-        // Offline Fallback Generator
+        setApiStatusMessage('No API Key set. Using built-in offline question generator.');
         setTimeout(() => {
           const generatedQuestions = [];
           const langBank = FALLBACK_BANK[outputLang] || FALLBACK_BANK.en;
@@ -745,7 +830,7 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                     <p className="text-xs text-slate-500 mt-1">Output Language set to: <strong className="text-indigo-600 uppercase">{outputLang === 'id' ? 'Bahasa Indonesia' : 'English'}</strong></p>
                   </div>
 
-                  {/* User-visible status / error banner for AI API */}
+                  {/* User-visible error & status alerts */}
                   {apiErrorMessage && (
                     <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-2xl text-xs font-semibold flex items-center justify-between">
                       <span>⚠️ {apiErrorMessage}</span>
@@ -827,7 +912,7 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                     <button onClick={generateInterviewQuestions} disabled={isGenerating || totalQuestionsCount === 0} className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-400 text-white font-bold rounded-xl shadow-lg transition flex items-center justify-center space-x-2">
                       {isGenerating ? (
                         <React.Fragment>
-                          <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <svg className="animate-spin h-5 w-5 text-white" xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
@@ -928,7 +1013,7 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                               </div>
                             </div>
 
-                            {/* Task 2 Fix: Recommended Rubric Section Matrix */}
+                            {/* Recommended Rubric Section Matrix */}
                             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2 text-xs">
                               <span className="font-bold text-slate-800 block text-xs">Recommended Rubric Criteria:</span>
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1089,7 +1174,7 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                           </div>
                           <h3 className="text-base font-bold text-slate-900">{q.question}</h3>
 
-                          {/* Task 2: Live Rubric Matrix Reference Drawer */}
+                          {/* Live Rubric Matrix Reference Drawer */}
                           {q.rubricMatrix && (
                             <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1">
                               <span className="font-bold text-slate-700 block">Recommended Rubric Criteria Benchmarks:</span>
@@ -1252,9 +1337,9 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                     <div className="space-y-4 text-xs text-slate-600 leading-relaxed">
                       <div className="bg-white p-4 rounded-xl border border-slate-200">
                         <strong className="text-indigo-600 block text-sm mb-1">1. Google AI Studio (Recommended — Free Tier)</strong>
-                        <p>Google provides a 100% free API tier for Gemini 2.5 Flash with up to 15 requests/minute.</p>
+                        <p>Google provides a 100% free API tier for Gemini Flash models with up to 15 requests/minute.</p>
                         <ul className="list-disc list-inside mt-2 space-y-1 text-slate-500">
-                          <li>Go to <a href="https://aistudio.google.com/" target="_blank" className="text-indigo-600 underline font-semibold">aistudio.google.com</a></li>
+                          <li>Go to <a href="[https://aistudio.google.com/](https://aistudio.google.com/)" target="_blank" className="text-indigo-600 underline font-semibold">aistudio.google.com</a></li>
                           <li>Sign in with your Google account and click <strong>"Create API Key"</strong>.</li>
                           <li>Paste the key into InterviewMate's API Key modal.</li>
                         </ul>
@@ -1264,7 +1349,7 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                         <strong className="text-indigo-600 block text-sm mb-1">2. Groq Cloud (Free Developer Tier)</strong>
                         <p>Groq provides free ultra-fast access to open models like Llama 3 and Mixtral.</p>
                         <ul className="list-disc list-inside mt-2 space-y-1 text-slate-500">
-                          <li>Visit <a href="https://console.groq.com/" target="_blank" className="text-indigo-600 underline font-semibold">console.groq.com</a></li>
+                          <li>Visit <a href="[https://console.groq.com/](https://console.groq.com/)" target="_blank" className="text-indigo-600 underline font-semibold">console.groq.com</a></li>
                           <li>Sign up for a free developer account and navigate to <strong>API Keys</strong>.</li>
                         </ul>
                       </div>
@@ -1273,7 +1358,7 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                         <strong className="text-indigo-600 block text-sm mb-1">3. OpenRouter (Free & Open Weights Gateway)</strong>
                         <p>OpenRouter offers access to free-tier open models with zero cost setups.</p>
                         <ul className="list-disc list-inside mt-2 space-y-1 text-slate-500">
-                          <li>Visit <a href="https://openrouter.ai/" target="_blank" className="text-indigo-600 underline font-semibold">openrouter.ai</a></li>
+                          <li>Visit <a href="[https://openrouter.ai/](https://openrouter.ai/)" target="_blank" className="text-indigo-600 underline font-semibold">openrouter.ai</a></li>
                           <li>Create a key under Account Keys and filter by free model endpoints.</li>
                         </ul>
                       </div>
@@ -1357,7 +1442,7 @@ Return ONLY a raw JSON object with zero markdown wrapper:
               <div className="bg-white max-w-md w-full p-6 rounded-3xl shadow-2xl space-y-4">
                 <h3 className="text-lg font-bold text-slate-900">Configure AI API Key</h3>
                 <p className="text-xs text-slate-500">Get free keys from <strong>Google AI Studio</strong> (aistudio.google.com), <strong>Groq</strong> (console.groq.com), or <strong>OpenRouter</strong> (openrouter.ai).</p>
-                <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="API Key (e.g., AIzaSy...)" className="w-full p-3 border border-slate-300 rounded-xl text-sm font-mono bg-slate-50" />
+                <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="API Key (e.g., AIzaSy... or gsk_...)" className="w-full p-3 border border-slate-300 rounded-xl text-sm font-mono bg-slate-50" />
                 <div className="flex justify-end space-x-3">
                   <button onClick={() => setShowApiKeyModal(false)} className="px-4 py-2 text-xs font-bold text-slate-500">Cancel</button>
                   <button onClick={() => { handleSaveApiKey(apiKey); setShowApiKeyModal(false); }} className="px-5 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl shadow">Save Key</button>

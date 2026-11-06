@@ -23,123 +23,17 @@
         transform-origin: center;
       }
       @media print {
-        header, nav, button, .no-print { display: none !important; }
+        header, nav, button, footer, .no-print { display: none !important; }
         body { background: white !important; color: black !important; }
         .print-card { border: 1px solid #cbd5e1 !important; box-shadow: none !important; break-inside: avoid; }
       }
     </style>
 </head>
-<body class="bg-slate-50 min-h-screen text-slate-800 antialiased">
-    <div id="root"></div>
+<body class="bg-slate-50 min-h-screen text-slate-800 antialiased flex flex-col">
+    <div id="root" class="flex-1 flex flex-col"></div>
 
     <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
-
-    // --- TRANSLATIONS DICTIONARY ---
-    const TRANSLATIONS = {
-      en: {
-        title: "InterviewMate",
-        subtitle: "AI Questions & Candidate Scorecards",
-        dashboard: "Dashboard",
-        generator: "1. Generator",
-        studio: "2. Question Studio",
-        live: "3. Live Interview",
-        scorecard: "4. Scorecard",
-        about: "About & Guide",
-        langToggle: "Bahasa Indonesia",
-        apiKeyActive: "API Key Active",
-        setApiKey: "Set Gemini Key",
-        heroTitle: "Structured Hiring Made Effortless",
-        heroDesc: "Generate tailored interview questions, dynamic rubrics, and high-objectivity candidate scorecards backed by Gemini AI.",
-        createButton: "Create New Interview Set →",
-        presetsTitle: "Quick Launch Presets",
-        usePreset: "Use Preset",
-        editPreset: "Edit",
-        addPreset: "+ Add Preset",
-        configTitle: "Configure Interview Requirements",
-        dept: "Department",
-        pos: "Position Title",
-        seniority: "Seniority Level",
-        compTitle: "Question Type Composition (Total:",
-        questions: "Questions",
-        additional: "Additional Context / Requirements",
-        genButton: "Generate Questions & Rubrics →",
-        genLoading: "Generating Question Kit...",
-        cheatsheetView: "Cheatsheet View",
-        studioView: "Studio View",
-        addCustomQ: "+ Add Question",
-        detailOnlyQuestions: "Questions Only",
-        detailRubrics: "Questions + Rubrics",
-        detailFull: "Questions + Rubrics + Indicators",
-        copyCheatsheet: "Copy Cheatsheet",
-        print: "Print Document",
-        scrutinyMode: "AI Scrutiny Mode:",
-        scoreLabel: "Score Candidate Response (1 to 5):",
-        notesLabel: "Interviewer Notes & Answer Transcript:",
-        aiReviewBtn: "AI Review Answer",
-        viewScorecard: "View Candidate Scorecard →",
-        overallRating: "Average Candidate Rating",
-        recLabel: "Automated Recommendation",
-        strengthsTitle: "Top 3 Identified Candidate Strengths",
-        improvementsTitle: "Top 3 Areas for Improvement",
-        colKeyword: "Keyword",
-        colEvidence: "Observed Evidence / Response",
-        colAction: "Impact / Actionable Recommendation",
-        printScorecard: "Print Candidate PDF",
-        closingMsg: "Semangat ya ❤️"
-      },
-      id: {
-        title: "InterviewMate",
-        subtitle: "Pertanyaan AI & Kartu Evaluasi Kandidat",
-        dashboard: "Dasbor",
-        generator: "1. Generator",
-        studio: "2. Studio Pertanyaan",
-        live: "3. Wawancara Langsung",
-        scorecard: "4. Kartu Evaluasi",
-        about: "Tentang & Panduan",
-        langToggle: "English",
-        apiKeyActive: "Kunci API Aktif",
-        setApiKey: "Atur Kunci Gemini",
-        heroTitle: "Proses Rekrutmen Terstruktur & Mudah",
-        heroDesc: "Buat pertanyaan wawancara khusus, rubrik penilaian dinamis, dan kartu evaluasi objektif berbasis AI Gemini.",
-        createButton: "Buat Sesi Wawancara Baru →",
-        presetsTitle: "Template Cepat",
-        usePreset: "Gunakan Template",
-        editPreset: "Edit",
-        addPreset: "+ Tambah Template",
-        configTitle: "Konfigurasi Kebutuhan Wawancara",
-        dept: "Departemen",
-        pos: "Posisi Pekerjaan",
-        seniority: "Tingkat Senioritas",
-        compTitle: "Komposisi Tipe Pertanyaan (Total:",
-        questions: "Pertanyaan",
-        additional: "Konteks Tambahan / Persyaratan Khusus",
-        genButton: "Buat Pertanyaan & Rubrik →",
-        genLoading: "Membuat Kit Pertanyaan...",
-        cheatsheetView: "Tampilan Lembar Panduan (Cheatsheet)",
-        studioView: "Tampilan Studio Edit",
-        addCustomQ: "+ Tambah Pertanyaan",
-        detailOnlyQuestions: "Hanya Pertanyaan",
-        detailRubrics: "Pertanyaan + Rubrik",
-        detailFull: "Pertanyaan + Rubrik + Indikator",
-        copyCheatsheet: "Salin Panduan",
-        print: "Cetak Dokumen",
-        scrutinyMode: "Tingkat Penilaian AI:",
-        scoreLabel: "Beri Nilai Jawaban Kandidat (1 - 5):",
-        notesLabel: "Catatan Wawancara & Transkrip Jawaban:",
-        aiReviewBtn: "Evaluasi Jawaban via AI",
-        viewScorecard: "Lihat Hasil Kartu Evaluasi →",
-        overallRating: "Rata-rata Nilai Kandidat",
-        recLabel: "Rekomendasi Otomatis",
-        strengthsTitle: "3 Kekuatan Utama Kandidat",
-        improvementsTitle: "3 Area yang Perlu Ditingkatkan",
-        colKeyword: "Kata Kunci",
-        colEvidence: "Bukti Teramati / Jawaban",
-        colAction: "Dampak / Rekomendasi Tindakan",
-        printScorecard: "Cetak PDF Kandidat",
-        closingMsg: "Semangat ya ❤️"
-      }
-    };
 
     const DEPARTMENT_POSITIONS = {
       'Information Technology': ['Software Engineer', 'Senior Full Stack Developer', 'Frontend Developer', 'Backend Architect', 'DevOps Engineer', 'Data Analyst', 'Systems Administrator', 'Product Manager'],
@@ -170,10 +64,8 @@
     ];
 
     function App() {
-      const [lang, setLang] = useState('en');
-      const t = TRANSLATIONS[lang];
-
       const [activeTab, setActiveTab] = useState('dashboard');
+      const [outputLang, setOutputLang] = useState('en'); // 'en' | 'id'
       const [studioViewMode, setStudioViewMode] = useState('studio'); // 'studio' | 'compact'
       const [cheatsheetDetail, setCheatsheetDetail] = useState('full'); // 'only_questions' | 'rubrics' | 'full'
       const [apiKey, setApiKey] = useState(() => localStorage.getItem('interviewmate_gemini_key') || '');
@@ -211,9 +103,24 @@
       const [reviewingIndex, setReviewingIndex] = useState(null);
       const [isGenerating, setIsGenerating] = useState(false);
 
+      // Max 10 questions composition calculation
       const totalQuestionsCount = useMemo(() => {
         return Object.values(config.composition).reduce((a, b) => a + Number(b), 0);
       }, [config.composition]);
+
+      const handleCompositionChange = (type, val) => {
+        const parsedVal = Math.max(0, parseInt(val) || 0);
+        const currentOthersTotal = Object.entries(config.composition)
+          .filter(([k]) => k !== type)
+          .reduce((sum, [_, count]) => sum + Number(count), 0);
+        
+        // Cap total at 10 max
+        const allowedVal = Math.min(parsedVal, 10 - currentOthersTotal);
+        setConfig(prev => ({
+          ...prev,
+          composition: { ...prev.composition, [type]: allowedVal }
+        }));
+      };
 
       const handleSaveApiKey = (key) => {
         setApiKey(key);
@@ -228,7 +135,6 @@
         setCandidateNotes(prev => ({ ...prev, [qIndex]: note }));
       };
 
-      // Question Studio Editing Functions
       const handleUpdateQuestion = (qIndex, field, value) => {
         if (!generatedKit) return;
         const updatedQuestions = [...generatedKit.questions];
@@ -238,17 +144,21 @@
 
       const handleAddCustomQuestion = () => {
         if (!generatedKit) return;
+        if (generatedKit.questions.length >= 10) {
+          alert('Maximum limit of 10 questions reached per kit.');
+          return;
+        }
         const newQ = {
           id: `q-custom-${Date.now()}`,
           category: 'Custom',
-          question: lang === 'id' ? 'Pertanyaan kustom baru...' : 'New custom question...',
-          purpose: lang === 'id' ? 'Menilai kriteria khusus.' : 'Evaluates specific custom role criteria.',
-          greenFlags: [lang === 'id' ? 'Penjelasan terstruktur' : 'Structured explanation'],
-          redFlags: [lang === 'id' ? 'Penjelasan kabur' : 'Vague answer'],
+          question: outputLang === 'id' ? 'Pertanyaan kustom baru...' : 'New custom question...',
+          purpose: outputLang === 'id' ? 'Menilai kriteria khusus.' : 'Evaluates specific custom role criteria.',
+          greenFlags: [outputLang === 'id' ? 'Penjelasan terstruktur' : 'Structured explanation'],
+          redFlags: [outputLang === 'id' ? 'Penjelasan kabur' : 'Vague answer'],
           rubricMatrix: {
-            1: lang === 'id' ? 'Tidak memenuhi' : 'Does not meet expectations',
-            3: lang === 'id' ? 'Memenuhi standar' : 'Meets expectations',
-            5: lang === 'id' ? 'Luar biasa' : 'Exceptional'
+            1: outputLang === 'id' ? 'Tidak memenuhi' : 'Does not meet expectations',
+            3: outputLang === 'id' ? 'Memenuhi standar' : 'Meets expectations',
+            5: outputLang === 'id' ? 'Luar biasa' : 'Exceptional'
           }
         };
         setGeneratedKit({ ...generatedKit, questions: [...generatedKit.questions, newQ] });
@@ -263,11 +173,11 @@
       const handleRegenerateSingleQuestion = async (qIndex) => {
         if (!generatedKit) return;
         const qToReplace = generatedKit.questions[qIndex];
-        const targetLang = lang === 'id' ? 'Bahasa Indonesia' : 'English';
+        const targetLangStr = outputLang === 'id' ? 'Bahasa Indonesia' : 'English';
 
         if (apiKey) {
           try {
-            const prompt = `Generate 1 alternative ${qToReplace.category} interview question in ${targetLang} for a ${generatedKit.seniority} level ${generatedKit.position}.
+            const prompt = `Generate 1 alternative ${qToReplace.category} interview question in ${targetLangStr} for a ${generatedKit.seniority} level ${generatedKit.position}.
 Return ONLY valid JSON matching:
 {
   "category": "${qToReplace.category}",
@@ -295,11 +205,10 @@ Return ONLY valid JSON matching:
           }
         }
 
-        // Offline single question fallback
         const updatedQuestions = [...generatedKit.questions];
         updatedQuestions[qIndex] = {
           ...qToReplace,
-          question: lang === 'id' 
+          question: outputLang === 'id' 
             ? `[Alternatif] Bagaimana Anda mengelola prioritas utama dalam peran ${generatedKit.position}?`
             : `[Alternative] How do you manage critical priorities in your role as ${generatedKit.position}?`,
           id: `q-regen-${Date.now()}`
@@ -307,14 +216,13 @@ Return ONLY valid JSON matching:
         setGeneratedKit({ ...generatedKit, questions: updatedQuestions });
       };
 
-      // AI Answer Transcript Evaluator
       const handleReviewAnswerWithAI = async (qIndex) => {
         const note = candidateNotes[qIndex];
         if (!note || !note.trim()) return;
         setReviewingIndex(qIndex);
 
         const questionObj = generatedKit.questions[qIndex];
-        const targetLang = lang === 'id' ? 'Bahasa Indonesia' : 'English';
+        const targetLangStr = outputLang === 'id' ? 'Bahasa Indonesia' : 'English';
 
         if (apiKey) {
           try {
@@ -323,7 +231,7 @@ Question: "${questionObj.question}"
 Candidate Transcript Notes: "${note}"
 Rubrics: Score 1: ${questionObj.rubricMatrix[1]}, Score 3: ${questionObj.rubricMatrix[3]}, Score 5: ${questionObj.rubricMatrix[5]}
 
-Analyze the notes in ${targetLang}. Return ONLY valid JSON:
+Analyze the notes in ${targetLangStr}. Return ONLY valid JSON:
 {
   "suggestedScore": 3,
   "strengthsFound": ["Strength 1", "Strength 2"],
@@ -348,13 +256,12 @@ Analyze the notes in ${targetLang}. Return ONLY valid JSON:
           }
         }
 
-        // Fallback Answer Evaluator
         setTimeout(() => {
           const mockResult = {
             suggestedScore: Math.min(5, Math.max(2, Math.floor(note.length / 25))),
-            strengthsFound: lang === 'id' ? ['Menyebutkan konteks relevan', 'Menjelaskan alur tindakan'] : ['Mentions relevant context', 'Explains action methodology'],
-            gapsFound: lang === 'id' ? ['Dapat menambahkan metrik hasil bisnis yang lebih spesifik'] : ['Could include more specific quantified business impact'],
-            suggestedFollowUp: lang === 'id' ? 'Apa metrik utama yang Anda gunakan untuk mengukur keberhasilan tersebut?' : 'What key metric did you use to measure that success?'
+            strengthsFound: outputLang === 'id' ? ['Menyebutkan konteks terstruktur', 'Menjelaskan alur tindakan'] : ['Mentions structured context', 'Explains action methodology'],
+            gapsFound: outputLang === 'id' ? ['Dapat menambahkan metrik hasil bisnis terukur'] : ['Could include more specific quantified business impact'],
+            suggestedFollowUp: outputLang === 'id' ? 'Apa metrik utama yang Anda gunakan untuk mengukur keberhasilan tersebut?' : 'What key metric did you use to measure that success?'
           };
           setAiAnswerReviews(prev => ({ ...prev, [qIndex]: mockResult }));
           handleScoreChange(qIndex, mockResult.suggestedScore);
@@ -362,10 +269,9 @@ Analyze the notes in ${targetLang}. Return ONLY valid JSON:
         }, 1000);
       };
 
-      // Copy Cheatsheet Function with Detail Levels
       const handleCopyCheatsheet = () => {
         if (!generatedKit) return;
-        let text = `INTERVIEW QUESTION CHEATSHEET\nPosition: ${generatedKit.position} (${generatedKit.seniority})\nLanguage: ${lang === 'id' ? 'Bahasa Indonesia' : 'English'}\nDate: ${new Date().toLocaleDateString()}\n\n`;
+        let text = `INTERVIEW QUESTION CHEATSHEET\nPosition: ${generatedKit.position} (${generatedKit.seniority})\nLanguage: ${outputLang === 'id' ? 'Bahasa Indonesia' : 'English'}\nDate: ${new Date().toLocaleDateString()}\n\n`;
 
         generatedKit.questions.forEach((q, idx) => {
           text += `Q${idx + 1} [${q.category}]: ${q.question}\n`;
@@ -387,7 +293,7 @@ Analyze the notes in ${targetLang}. Return ONLY valid JSON:
 
         if (navigator.clipboard && window.isSecureContext) {
           navigator.clipboard.writeText(text).then(() => {
-            setCopyStatus(lang === 'id' ? 'Tersalin!' : 'Copied!');
+            setCopyStatus(outputLang === 'id' ? 'Tersalin!' : 'Copied!');
             setTimeout(() => setCopyStatus(''), 3000);
           });
         } else {
@@ -397,50 +303,49 @@ Analyze the notes in ${targetLang}. Return ONLY valid JSON:
           textArea.select();
           document.execCommand('copy');
           document.body.removeChild(textArea);
-          setCopyStatus(lang === 'id' ? 'Tersalin!' : 'Copied!');
+          setCopyStatus(outputLang === 'id' ? 'Tersalin!' : 'Copied!');
           setTimeout(() => setCopyStatus(''), 3000);
         }
       };
 
       const computeOverallStats = useMemo(() => {
         const scores = Object.values(candidateScores).filter(s => typeof s === 'number');
-        if (scores.length === 0) return { avgScore: '0.0', count: 0, recommendation: lang === 'id' ? 'Menunggu Penilaian' : 'Pending Ratings' };
+        if (scores.length === 0) return { avgScore: '0.0', count: 0, recommendation: outputLang === 'id' ? 'Menunggu Penilaian' : 'Pending Ratings' };
         const sum = scores.reduce((acc, curr) => acc + curr, 0);
         const avg = (sum / scores.length).toFixed(1);
         
-        let recommendation = lang === 'id' ? 'Tidak Direkomendasikan' : 'Not Recommended';
-        if (avg >= 4.5) recommendation = lang === 'id' ? 'Sangat Direkomendasikan' : 'Strongly Recommended';
-        else if (avg >= 3.6) recommendation = lang === 'id' ? 'Direkomendasikan' : 'Recommended';
-        else if (avg >= 2.8) recommendation = lang === 'id' ? 'Perlu Evaluasi Lanjutan' : 'Further Evaluation Needed';
+        let recommendation = outputLang === 'id' ? 'Tidak Direkomendasikan' : 'Not Recommended';
+        if (avg >= 4.5) recommendation = outputLang === 'id' ? 'Sangat Direkomendasikan' : 'Strongly Recommended';
+        else if (avg >= 3.6) recommendation = outputLang === 'id' ? 'Direkomendasikan' : 'Recommended';
+        else if (avg >= 2.8) recommendation = outputLang === 'id' ? 'Perlu Evaluasi Lanjutan' : 'Further Evaluation Needed';
 
         return { avgScore: avg, count: scores.length, recommendation };
-      }, [candidateScores, lang]);
+      }, [candidateScores, outputLang]);
 
-      // Gemini AI Generation
       const generateInterviewQuestions = async () => {
         setIsGenerating(true);
         const targetPosition = config.department === 'Other / Custom' ? (config.customPosition || 'Custom Role') : config.position;
-        const targetLang = lang === 'id' ? 'Bahasa Indonesia' : 'English';
+        const targetLangStr = outputLang === 'id' ? 'Bahasa Indonesia' : 'English';
         
         const compositionText = Object.entries(config.composition)
           .filter(([_, count]) => count > 0)
-          .map(([type, count]) => `${count} ${type} Interview Questions`)
+          .map(([type, count]) => `${count} ${type} Questions`)
           .join(', ');
 
         if (apiKey) {
           try {
-            const prompt = `Generate a structured interview question kit in ${targetLang} for a ${config.seniority} level ${targetPosition} in the ${config.department} department.
-Question Composition: ${compositionText} (Total ${totalQuestionsCount} questions).
-Additional Context: ${config.additionalContext}
+            const prompt = `Generate a structured interview question kit strictly in ${targetLangStr} for a ${config.seniority} level ${targetPosition} in ${config.department}.
+Composition: ${compositionText} (Total ${totalQuestionsCount} questions, max 10).
+Context: ${config.additionalContext}
 
-Return ONLY valid JSON in ${targetLang} matching this structure:
+Return ONLY valid JSON in ${targetLangStr} matching:
 {
   "questions": [
     {
       "id": "q1",
       "category": "Technical",
-      "question": "Question text here",
-      "purpose": "Purpose of question",
+      "question": "Question text in ${targetLangStr}",
+      "purpose": "Purpose in ${targetLangStr}",
       "greenFlags": ["Indicator 1", "Indicator 2"],
       "redFlags": ["Warning sign 1", "Warning sign 2"],
       "rubricMatrix": {
@@ -466,7 +371,7 @@ Return ONLY valid JSON in ${targetLang} matching this structure:
             setGeneratedKit({
               position: targetPosition,
               seniority: config.seniority,
-              questions: parsed.questions
+              questions: parsed.questions.slice(0, 10)
             });
             setActiveTab('studio');
             setIsGenerating(false);
@@ -476,24 +381,25 @@ Return ONLY valid JSON in ${targetLang} matching this structure:
           }
         }
 
-        // Offline Fallback Generator
+        // Offline Fallback
         setTimeout(() => {
           const generatedQuestions = [];
           Object.entries(config.composition).forEach(([type, count]) => {
             for (let i = 0; i < count; i++) {
+              if (generatedQuestions.length >= 10) break;
               generatedQuestions.push({
                 id: `q-${type}-${i+1}`,
                 category: type,
-                question: lang === 'id' 
+                question: outputLang === 'id' 
                   ? `[${type}] Jelaskan pengalaman Anda sebagai ${config.seniority} ${targetPosition} terkait tantangan utama dalam bidang ini.`
                   : `[${type}] Describe your experience as a ${config.seniority} ${targetPosition} regarding key operational challenges.`,
-                purpose: lang === 'id' ? `Menilai kompetensi ${type} untuk posisi ${targetPosition}.` : `Evaluates ${type} competencies for ${targetPosition}.`,
-                greenFlags: lang === 'id' ? ['Menggunakan metode STAR dengan detail', 'Memberikan contoh angka/metrik hasil'] : ['Uses STAR method with specific details', 'Provides quantified metric results'],
-                redFlags: lang === 'id' ? ['Jawaban terlalu umum tanpa bukti', 'Menyalahkan tim atas kegagalan'] : ['Generic answers without concrete evidence', 'Blames team members for failures'],
+                purpose: outputLang === 'id' ? `Menilai kompetensi ${type} untuk posisi ${targetPosition}.` : `Evaluates ${type} competencies for ${targetPosition}.`,
+                greenFlags: outputLang === 'id' ? ['Menggunakan metode STAR dengan detail', 'Memberikan contoh angka/metrik hasil'] : ['Uses STAR method with specific details', 'Provides quantified metric results'],
+                redFlags: outputLang === 'id' ? ['Jawaban terlalu umum tanpa bukti', 'Menyalahkan tim atas kegagalan'] : ['Generic answers without concrete evidence', 'Blames team members for failures'],
                 rubricMatrix: {
-                  1: lang === 'id' ? 'Jawaban kabur tanpa penjelasan konkret.' : 'Vague answer with no concrete evidence.',
-                  3: lang === 'id' ? 'Memenuhi standar dasar dengan alur yang jelas.' : 'Meets baseline standards with clear methodology.',
-                  5: lang === 'id' ? 'Luar biasa dengan dampak bisnis terukur.' : 'Exceptional answer with clear ROI and impact.'
+                  1: outputLang === 'id' ? 'Jawaban kabur tanpa penjelasan konkret.' : 'Vague answer with no concrete evidence.',
+                  3: outputLang === 'id' ? 'Memenuhi standar dasar dengan alur yang jelas.' : 'Meets baseline standards with clear methodology.',
+                  5: outputLang === 'id' ? 'Luar biasa dengan dampak bisnis terukur.' : 'Exceptional answer with clear ROI and impact.'
                 }
               });
             }
@@ -510,494 +416,580 @@ Return ONLY valid JSON in ${targetLang} matching this structure:
       };
 
       return (
-        <div className="min-h-screen flex flex-col">
-          {/* Header Bar */}
-          <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40 shadow-md">
-            <div className="max-w-7xl mx-auto px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
-                <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-black text-xl shadow-lg">M</div>
-                <div>
-                  <h1 className="font-bold text-lg leading-tight tracking-wide">{t.title}</h1>
-                  <p className="text-xs text-slate-400">{t.subtitle}</p>
-                </div>
-              </div>
-
-              {/* Navigation Links */}
-              <nav className="flex items-center space-x-1.5 text-xs font-semibold overflow-x-auto py-1">
-                <button onClick={() => setActiveTab('dashboard')} className={`px-3 py-2 rounded-xl transition ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:bg-slate-800'}`}>{t.dashboard}</button>
-                <button onClick={() => setActiveTab('generator')} className={`px-3 py-2 rounded-xl transition ${activeTab === 'generator' ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:bg-slate-800'}`}>{t.generator}</button>
-                <button onClick={() => setActiveTab('studio')} className={`px-3 py-2 rounded-xl transition ${activeTab === 'studio' ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:bg-slate-800'}`}>{t.studio}</button>
-                <button onClick={() => setActiveTab('live-interview')} className={`px-3 py-2 rounded-xl transition ${activeTab === 'live-interview' ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:bg-slate-800'}`}>{t.live}</button>
-                <button onClick={() => setActiveTab('scorecard')} className={`px-3 py-2 rounded-xl transition ${activeTab === 'scorecard' ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:bg-slate-800'}`}>{t.scorecard}</button>
-                <button onClick={() => setActiveTab('about')} className={`px-3 py-2 rounded-xl transition ${activeTab === 'about' ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:bg-slate-800'}`}>{t.about}</button>
-              </nav>
-
-              {/* Controls: Language Toggle & API Key */}
-              <div className="flex items-center space-x-2">
-                <button onClick={() => setLang(lang === 'en' ? 'id' : 'en')} className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-xl text-xs font-bold text-slate-200 transition">
-                  🌐 {t.langToggle}
-                </button>
-                <button onClick={() => setShowApiKeyModal(true)} className="px-3 py-1.5 rounded-xl border border-slate-700 hover:border-slate-500 text-xs font-semibold flex items-center space-x-2 text-slate-300 bg-slate-800/60 transition">
-                  <span className={`w-2.5 h-2.5 rounded-full ${apiKey ? 'bg-emerald-400 shadow-sm' : 'bg-amber-400'}`}></span>
-                  <span>{apiKey ? t.apiKeyActive : t.setApiKey}</span>
-                </button>
-              </div>
-            </div>
-          </header>
-
-          {/* Main Workspace */}
-          <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8">
-
-            {/* DASHBOARD TAB */}
-            {activeTab === 'dashboard' && (
-              <div className="space-y-8">
-                <div className="bg-gradient-to-r from-indigo-900 via-slate-900 to-slate-900 text-white p-8 rounded-3xl shadow-xl border border-slate-800">
-                  <h2 className="text-3xl font-extrabold mb-3">{t.heroTitle}</h2>
-                  <p className="text-slate-300 max-w-2xl mb-6 text-sm leading-relaxed">{t.heroDesc}</p>
-                  <button onClick={() => setActiveTab('generator')} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg transition">{t.createButton}</button>
+        <div className="min-h-screen flex flex-col justify-between">
+          <div>
+            {/* Header Bar */}
+            <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40 shadow-md">
+              <div className="max-w-7xl mx-auto px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
+                  <div className="w-10 h-10 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-black text-xl shadow-lg">M</div>
+                  <div>
+                    <h1 className="font-bold text-lg leading-tight tracking-wide">InterviewMate</h1>
+                    <p className="text-xs text-slate-400">AI Question Generator & Candidate Scorecards</p>
+                  </div>
                 </div>
 
-                <div>
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-bold text-slate-900">{t.presetsTitle}</h3>
-                    <button onClick={() => setEditingPreset({ id: `preset-${Date.now()}`, title: '', department: 'Information Technology', position: 'Software Engineer', seniority: 'Mid-Level', composition: { General: 2, Technical: 3 }, additionalContext: '' })} className="px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-bold rounded-xl transition">
-                      {t.addPreset}
-                    </button>
+                {/* Navigation Links */}
+                <nav className="flex items-center space-x-1.5 text-xs font-semibold overflow-x-auto py-1">
+                  <button onClick={() => setActiveTab('dashboard')} className={`px-3 py-2 rounded-xl transition ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:bg-slate-800'}`}>Dashboard</button>
+                  <button onClick={() => setActiveTab('generator')} className={`px-3 py-2 rounded-xl transition ${activeTab === 'generator' ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:bg-slate-800'}`}>1. Generator</button>
+                  <button onClick={() => setActiveTab('studio')} className={`px-3 py-2 rounded-xl transition ${activeTab === 'studio' ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:bg-slate-800'}`}>2. Question Studio</button>
+                  <button onClick={() => setActiveTab('live-interview')} className={`px-3 py-2 rounded-xl transition ${activeTab === 'live-interview' ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:bg-slate-800'}`}>3. Live Interview</button>
+                  <button onClick={() => setActiveTab('scorecard')} className={`px-3 py-2 rounded-xl transition ${activeTab === 'scorecard' ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:bg-slate-800'}`}>4. Scorecard</button>
+                  <button onClick={() => setActiveTab('about')} className={`px-3 py-2 rounded-xl transition ${activeTab === 'about' ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:bg-slate-800'}`}>About & Guide</button>
+                </nav>
+
+                {/* Controls: AI Output Language Toggle & API Key */}
+                <div className="flex items-center space-x-2">
+                  <div className="flex items-center bg-slate-800 p-1 border border-slate-700 rounded-xl text-xs font-bold">
+                    <span className="px-2 text-slate-400">AI Output:</span>
+                    <button onClick={() => setOutputLang('en')} className={`px-2.5 py-1 rounded-lg transition ${outputLang === 'en' ? 'bg-indigo-600 text-white' : 'text-slate-300'}`}>EN</button>
+                    <button onClick={() => setOutputLang('id')} className={`px-2.5 py-1 rounded-lg transition ${outputLang === 'id' ? 'bg-indigo-600 text-white' : 'text-slate-300'}`}>ID</button>
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    {presets.map(p => (
-                      <div key={p.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition relative group">
-                        <div className="flex justify-between items-start">
-                          <span className="text-xs font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-md">{p.department}</span>
-                          <button onClick={() => setEditingPreset(p)} className="text-xs text-slate-400 hover:text-slate-700 font-semibold">{t.editPreset}</button>
-                        </div>
-                        <h4 className="font-bold text-slate-900 text-lg mt-3">{p.title}</h4>
-                        <p className="text-xs text-slate-500 mt-1">{p.seniority}</p>
-                        <button onClick={() => {
-                          setConfig({ ...config, department: p.department, position: p.position, seniority: p.seniority, composition: p.composition || config.composition, additionalContext: p.additionalContext });
-                          setActiveTab('generator');
-                        }} className="mt-6 w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition">{t.usePreset}</button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* GENERATOR TAB */}
-            {activeTab === 'generator' && (
-              <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm max-w-3xl mx-auto space-y-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-slate-900">{t.configTitle}</h2>
-                </div>
-
-                <div className="space-y-6">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-2">{t.dept}</label>
-                    <select value={config.department} onChange={e => setConfig({ ...config, department: e.target.value, position: DEPARTMENT_POSITIONS[e.target.value][0] })} className="w-full p-3 border border-slate-300 rounded-xl bg-slate-50 text-sm font-medium">
-                      {Object.keys(DEPARTMENT_POSITIONS).map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-2">{t.pos}</label>
-                    <select value={config.position} onChange={e => setConfig({ ...config, position: e.target.value })} className="w-full p-3 border border-slate-300 rounded-xl bg-slate-50 text-sm font-medium">
-                      {DEPARTMENT_POSITIONS[config.department]?.map(p => <option key={p} value={p}>{p}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-2">{t.seniority}</label>
-                    <select value={config.seniority} onChange={e => setConfig({ ...config, seniority: e.target.value })} className="w-full p-3 border border-slate-300 rounded-xl bg-slate-50 text-sm font-medium">
-                      {SENIORITY_LEVELS.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-
-                  {/* Question Composition Section */}
-                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
-                    <div className="flex justify-between items-center">
-                      <h3 className="font-bold text-sm text-slate-900">{t.compTitle} {totalQuestionsCount} {t.questions})</h3>
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                      {Object.keys(config.composition).map(type => (
-                        <div key={type} className="bg-white p-3 rounded-xl border border-slate-200">
-                          <label className="block text-xs font-bold text-slate-600 mb-1">{type}</label>
-                          <input 
-                            type="number" 
-                            min="0" 
-                            max="10" 
-                            value={config.composition[type]} 
-                            onChange={e => setConfig({ ...config, composition: { ...config.composition, [type]: Math.max(0, parseInt(e.target.value) || 0) } })}
-                            className="w-full p-2 text-sm font-bold border border-slate-300 rounded-lg text-center bg-slate-50"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-2">{t.additional}</label>
-                    <textarea value={config.additionalContext} onChange={e => setConfig({ ...config, additionalContext: e.target.value })} placeholder="e.g. Focus on leadership, system design, high concurrency, and conflict resolution..." className="w-full p-3 border border-slate-300 rounded-xl bg-slate-50 h-24 text-sm" />
-                  </div>
-
-                  <button onClick={generateInterviewQuestions} disabled={isGenerating || totalQuestionsCount === 0} className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-400 text-white font-bold rounded-xl shadow-lg transition">
-                    {isGenerating ? t.genLoading : t.genButton}
+                  <button onClick={() => setShowApiKeyModal(true)} className="px-3 py-1.5 rounded-xl border border-slate-700 hover:border-slate-500 text-xs font-semibold flex items-center space-x-2 text-slate-300 bg-slate-800/60 transition">
+                    <span className={`w-2.5 h-2.5 rounded-full ${apiKey ? 'bg-emerald-400 shadow-sm' : 'bg-amber-400'}`}></span>
+                    <span>{apiKey ? 'API Key Active' : 'Set API Key'}</span>
                   </button>
                 </div>
               </div>
-            )}
+            </header>
 
-            {/* QUESTION STUDIO & CHEATSHEET TAB */}
-            {activeTab === 'studio' && (
-              <div className="space-y-6">
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-4 no-print">
-                  <div>
-                    <h2 className="text-xl font-bold text-slate-900">{generatedKit?.position || t.studio}</h2>
-                    <p className="text-xs text-slate-500">{config.seniority} • {generatedKit?.questions?.length || 0} {t.questions}</p>
+            {/* Main Workspace */}
+            <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8">
+
+              {/* DASHBOARD TAB (Informative SaaS Hub) */}
+              {activeTab === 'dashboard' && (
+                <div className="space-y-8">
+                  {/* Hero Banner */}
+                  <div className="bg-gradient-to-r from-indigo-900 via-slate-900 to-slate-900 text-white p-8 rounded-3xl shadow-xl border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                    <div className="space-y-3 max-w-2xl">
+                      <span className="text-xs font-bold px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-full border border-indigo-500/30">AI-Powered Hiring Studio</span>
+                      <h2 className="text-3xl font-extrabold">Structured Interviewing Made Simple & Objective</h2>
+                      <p className="text-slate-300 text-sm leading-relaxed">Generate role-tailored question sets (up to 10), conduct live interviews with anti-inflation scrutiny, and export executive scorecards.</p>
+                    </div>
+                    <button onClick={() => setActiveTab('generator')} className="px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm rounded-xl shadow-lg transition whitespace-nowrap">
+                      Start New Interview →
+                    </button>
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-3">
-                    {/* View Switcher */}
-                    <div className="bg-slate-100 p-1 rounded-xl flex space-x-1 text-xs font-bold">
-                      <button onClick={() => setStudioViewMode('studio')} className={`px-3 py-1.5 rounded-lg transition ${studioViewMode === 'studio' ? 'bg-white text-indigo-600 shadow' : 'text-slate-500'}`}>{t.studioView}</button>
-                      <button onClick={() => setStudioViewMode('compact')} className={`px-3 py-1.5 rounded-lg transition ${studioViewMode === 'compact' ? 'bg-white text-indigo-600 shadow' : 'text-slate-500'}`}>{t.cheatsheetView}</button>
+                  {/* Informative Platform Metrics Grid */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+                      <span className="text-xs font-bold text-slate-400 uppercase">Question Cap</span>
+                      <p className="text-2xl font-black text-slate-900">10 Max</p>
+                      <p className="text-xs text-slate-500">Custom composition per set</p>
+                    </div>
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+                      <span className="text-xs font-bold text-slate-400 uppercase">AI Scrutiny Tiers</span>
+                      <p className="text-2xl font-black text-indigo-600">4 Tiers</p>
+                      <p className="text-xs text-slate-500">Lenient to Ruthless / Bar Raiser</p>
+                    </div>
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+                      <span className="text-xs font-bold text-slate-400 uppercase">Output Languages</span>
+                      <p className="text-2xl font-black text-emerald-600">EN & ID</p>
+                      <p className="text-xs text-slate-500">English & Bahasa Indonesia</p>
+                    </div>
+                    <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-1">
+                      <span className="text-xs font-bold text-slate-400 uppercase">Cheatsheet Modes</span>
+                      <p className="text-2xl font-black text-amber-600">3 Views</p>
+                      <p className="text-xs text-slate-500">Questions, Rubrics & Flags</p>
+                    </div>
+                  </div>
+
+                  {/* Interactive Workflow Spotlight */}
+                  <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+                    <h3 className="text-lg font-bold text-slate-900">Application Workflow & Capabilities</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                        <span className="w-7 h-7 rounded-lg bg-indigo-600 text-white font-bold flex items-center justify-center text-xs">1</span>
+                        <h4 className="font-bold text-slate-900 text-sm">Question Generator</h4>
+                        <p className="text-slate-500">Select department, position, seniority, and compose your kit mix (General, Technical, Behavioral, etc.).</p>
+                      </div>
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                        <span className="w-7 h-7 rounded-lg bg-indigo-600 text-white font-bold flex items-center justify-center text-xs">2</span>
+                        <h4 className="font-bold text-slate-900 text-sm">Studio & Cheatsheets</h4>
+                        <p className="text-slate-500">Edit, swap questions with AI, add custom questions, or switch to Cheatsheet View to copy & print notes.</p>
+                      </div>
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                        <span className="w-7 h-7 rounded-lg bg-indigo-600 text-white font-bold flex items-center justify-center text-xs">3</span>
+                        <h4 className="font-bold text-slate-900 text-sm">Live Answer Review</h4>
+                        <p className="text-slate-500">Score candidate answers (1-5) and let AI analyze transcript notes using your selected Scrutiny Mode.</p>
+                      </div>
+                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                        <span className="w-7 h-7 rounded-lg bg-indigo-600 text-white font-bold flex items-center justify-center text-xs">4</span>
+                        <h4 className="font-bold text-slate-900 text-sm">Executive Scorecard</h4>
+                        <p className="text-slate-500">View automated average ratings, hiring recommendation badges, and Top 3 Strengths/Improvements tables.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Presets Grid */}
+                  <div>
+                    <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-xl font-bold text-slate-900">Quick Launch Presets</h3>
+                      <button onClick={() => setEditingPreset({ id: `preset-${Date.now()}`, title: '', department: 'Information Technology', position: 'Software Engineer', seniority: 'Mid-Level', composition: { General: 2, Technical: 3 }, additionalContext: '' })} className="px-3 py-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-bold rounded-xl transition">
+                        + Add Preset
+                      </button>
                     </div>
 
-                    {studioViewMode === 'studio' && (
-                      <button onClick={handleAddCustomQuestion} className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow transition">
-                        {t.addCustomQ}
-                      </button>
-                    )}
-
-                    {studioViewMode === 'compact' && (
-                      <select value={cheatsheetDetail} onChange={e => setCheatsheetDetail(e.target.value)} className="text-xs font-bold p-2 border border-slate-300 rounded-xl bg-slate-50">
-                        <option value="only_questions">{t.detailOnlyQuestions}</option>
-                        <option value="rubrics">{t.detailRubrics}</option>
-                        <option value="full">{t.detailFull}</option>
-                      </select>
-                    )}
-
-                    <button onClick={handleCopyCheatsheet} className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow transition">
-                      {copyStatus || t.copyCheatsheet}
-                    </button>
-                    <button onClick={() => window.print()} className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow transition">
-                      {t.print}
-                    </button>
-                  </div>
-                </div>
-
-                {generatedKit ? (
-                  studioViewMode === 'studio' ? (
-                    /* Interactive Studio Mode with Inline Editing */
-                    <div className="space-y-6">
-                      {generatedKit.questions.map((q, idx) => (
-                        <div key={q.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                          <div className="flex justify-between items-center gap-2">
-                            <input 
-                              type="text" 
-                              value={q.category} 
-                              onChange={e => handleUpdateQuestion(idx, 'category', e.target.value)}
-                              className="text-xs font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-md border border-indigo-100" 
-                            />
-                            <div className="flex items-center space-x-2">
-                              <button onClick={() => handleRegenerateSingleQuestion(idx)} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2.5 py-1 rounded-md">
-                                🔄 AI Swap Question
-                              </button>
-                              <button onClick={() => handleDeleteQuestion(idx)} className="text-xs font-bold text-rose-600 hover:text-rose-800 bg-rose-50 px-2.5 py-1 rounded-md">
-                                🗑️ Delete
-                              </button>
-                            </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      {presets.map(p => (
+                        <div key={p.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition relative group">
+                          <div className="flex justify-between items-start">
+                            <span className="text-xs font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-md">{p.department}</span>
+                            <button onClick={() => setEditingPreset(p)} className="text-xs text-slate-400 hover:text-slate-700 font-semibold">Edit</button>
                           </div>
-
-                          <textarea 
-                            value={q.question} 
-                            onChange={e => handleUpdateQuestion(idx, 'question', e.target.value)} 
-                            className="w-full text-base font-bold text-slate-900 border border-slate-200 rounded-xl p-3 bg-slate-50 focus:bg-white transition"
-                          />
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs">
-                            <div>
-                              <span className="font-bold text-emerald-700 block mb-1">✓ Green Flags (Strong Answer)</span>
-                              <textarea 
-                                value={q.greenFlags?.join('\n') || ''} 
-                                onChange={e => handleUpdateQuestion(idx, 'greenFlags', e.target.value.split('\n'))}
-                                placeholder="One flag per line..."
-                                className="w-full p-2 border border-slate-200 rounded-lg bg-white h-20"
-                              />
-                            </div>
-                            <div>
-                              <span className="font-bold text-rose-700 block mb-1">⚠ Red Flags (Warning Signs)</span>
-                              <textarea 
-                                value={q.redFlags?.join('\n') || ''} 
-                                onChange={e => handleUpdateQuestion(idx, 'redFlags', e.target.value.split('\n'))}
-                                placeholder="One flag per line..."
-                                className="w-full p-2 border border-slate-200 rounded-lg bg-white h-20"
-                              />
-                            </div>
-                          </div>
-
-                          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2 text-xs">
-                            <span className="font-bold text-slate-700 block">Recommended Rubric Criteria:</span>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                              <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                                <span className="font-bold text-rose-600 block mb-1">Score 1 (Poor):</span>
-                                <input type="text" value={q.rubricMatrix?.[1] || ''} onChange={e => handleUpdateQuestion(idx, 'rubricMatrix', { ...q.rubricMatrix, 1: e.target.value })} className="w-full text-xs p-1 border border-slate-200 rounded" />
-                              </div>
-                              <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                                <span className="font-bold text-amber-600 block mb-1">Score 3 (Meets):</span>
-                                <input type="text" value={q.rubricMatrix?.[3] || ''} onChange={e => handleUpdateQuestion(idx, 'rubricMatrix', { ...q.rubricMatrix, 3: e.target.value })} className="w-full text-xs p-1 border border-slate-200 rounded" />
-                              </div>
-                              <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                                <span className="font-bold text-emerald-600 block mb-1">Score 5 (Excellent):</span>
-                                <input type="text" value={q.rubricMatrix?.[5] || ''} onChange={e => handleUpdateQuestion(idx, 'rubricMatrix', { ...q.rubricMatrix, 5: e.target.value })} className="w-full text-xs p-1 border border-slate-200 rounded" />
-                              </div>
-                            </div>
-                          </div>
+                          <h4 className="font-bold text-slate-900 text-lg mt-3">{p.title}</h4>
+                          <p className="text-xs text-slate-500 mt-1">{p.seniority}</p>
+                          <button onClick={() => {
+                            setConfig({ ...config, department: p.department, position: p.position, seniority: p.seniority, composition: p.composition || config.composition, additionalContext: p.additionalContext });
+                            setActiveTab('generator');
+                          }} className="mt-6 w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition">Use Preset</button>
                         </div>
                       ))}
-                      <div className="flex justify-end no-print">
-                        <button onClick={() => setActiveTab('live-interview')} className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg transition">Start Live Interview →</button>
-                      </div>
                     </div>
-                  ) : (
-                    /* Cheatsheet View Mode */
-                    <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6 print-card">
-                      <div className="border-b border-slate-200 pb-4">
-                        <h2 className="text-2xl font-black text-slate-900">{generatedKit.position} — Cheatsheet</h2>
-                        <p className="text-xs text-slate-500 mt-1">Seniority: {generatedKit.seniority} • Questions: {generatedKit.questions.length}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* GENERATOR TAB */}
+              {activeTab === 'generator' && (
+                <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm max-w-3xl mx-auto space-y-6">
+                  <div>
+                    <h2 className="text-2xl font-bold text-slate-900">Configure Interview Requirements</h2>
+                    <p className="text-xs text-slate-500 mt-1">Output Language set to: <strong className="text-indigo-600 uppercase">{outputLang === 'id' ? 'Bahasa Indonesia' : 'English'}</strong></p>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-2">Department</label>
+                      <select value={config.department} onChange={e => setConfig({ ...config, department: e.target.value, position: DEPARTMENT_POSITIONS[e.target.value][0] })} className="w-full p-3 border border-slate-300 rounded-xl bg-slate-50 text-sm font-medium">
+                        {Object.keys(DEPARTMENT_POSITIONS).map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-2">Position Title</label>
+                      <select value={config.position} onChange={e => setConfig({ ...config, position: e.target.value })} className="w-full p-3 border border-slate-300 rounded-xl bg-slate-50 text-sm font-medium">
+                        {DEPARTMENT_POSITIONS[config.department]?.map(p => <option key={p} value={p}>{p}</option>)}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-2">Seniority Level</label>
+                      <select value={config.seniority} onChange={e => setConfig({ ...config, seniority: e.target.value })} className="w-full p-3 border border-slate-300 rounded-xl bg-slate-50 text-sm font-medium">
+                        {SENIORITY_LEVELS.map(s => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+
+                    {/* Question Composition Section (Max 10) */}
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-4">
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-bold text-sm text-slate-900">Question Type Composition</h3>
+                        <span className={`text-xs font-bold px-3 py-1 rounded-full ${totalQuestionsCount === 10 ? 'bg-amber-100 text-amber-800' : 'bg-indigo-100 text-indigo-800'}`}>
+                          {totalQuestionsCount} / 10 Max Questions
+                        </span>
                       </div>
 
-                      <div className="space-y-6">
-                        {generatedKit.questions.map((q, idx) => (
-                          <div key={q.id} className="border-b border-slate-100 pb-5 space-y-2">
-                            <div className="flex items-baseline justify-between">
-                              <h3 className="font-bold text-slate-900 text-sm">Q{idx + 1}. {q.question}</h3>
-                              <span className="text-xs font-bold text-indigo-600">[{q.category}]</span>
-                            </div>
-
-                            {cheatsheetDetail !== 'only_questions' && (
-                              <React.Fragment>
-                                <p className="text-xs text-slate-600 italic">Purpose: {q.purpose}</p>
-                                <div className="text-xs bg-slate-50 p-3 rounded-lg border border-slate-200 mt-2">
-                                  <strong>Rubrics:</strong> [1-Poor]: {q.rubricMatrix?.[1]} | [3-Meets]: {q.rubricMatrix?.[3]} | [5-Excellent]: {q.rubricMatrix?.[5]}
-                                </div>
-                              </React.Fragment>
-                            )}
-
-                            {cheatsheetDetail === 'full' && (
-                              <div className="grid grid-cols-2 gap-4 text-xs mt-2">
-                                <div><strong className="text-emerald-700">Green Flags:</strong> {q.greenFlags?.join('; ')}</div>
-                                <div><strong className="text-rose-700">Red Flags:</strong> {q.redFlags?.join('; ')}</div>
-                              </div>
-                            )}
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        {Object.keys(config.composition).map(type => (
+                          <div key={type} className="bg-white p-3 rounded-xl border border-slate-200">
+                            <label className="block text-xs font-bold text-slate-600 mb-1">{type}</label>
+                            <input 
+                              type="number" 
+                              min="0" 
+                              max="10" 
+                              value={config.composition[type]} 
+                              onChange={e => handleCompositionChange(type, e.target.value)}
+                              className="w-full p-2 text-sm font-bold border border-slate-300 rounded-lg text-center bg-slate-50"
+                            />
                           </div>
                         ))}
                       </div>
                     </div>
-                  )
-                ) : (
-                  <div className="bg-white p-12 text-center rounded-2xl border border-slate-200 text-slate-500">No question set generated yet.</div>
-                )}
-              </div>
-            )}
 
-            {/* LIVE INTERVIEW STUDIO WITH AI ANSWER EVALUATOR */}
-            {activeTab === 'live-interview' && (
-              <div className="space-y-6">
-                <div className="bg-white p-6 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-4">
-                  <div>
-                    <h2 className="text-xl font-bold text-slate-900">{generatedKit?.position || 'Live Interview'}</h2>
-                    <p className="text-xs text-slate-500">{config.seniority}</p>
-                  </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-2">Additional Context / Special Requirements</label>
+                      <textarea value={config.additionalContext} onChange={e => setConfig({ ...config, additionalContext: e.target.value })} placeholder="e.g. Focus on leadership, system design, high concurrency, and conflict resolution..." className="w-full p-3 border border-slate-300 rounded-xl bg-slate-50 h-24 text-sm" />
+                    </div>
 
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xs font-bold text-slate-500">{t.scrutinyMode}</span>
-                    <select value={scrutinyMode} onChange={e => setScrutinyMode(e.target.value)} className="text-xs font-bold p-2 rounded-xl border border-slate-300 bg-slate-50">
-                      {SCRUTINY_LEVELS.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
-                    </select>
+                    <button onClick={generateInterviewQuestions} disabled={isGenerating || totalQuestionsCount === 0} className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-400 text-white font-bold rounded-xl shadow-lg transition">
+                      {isGenerating ? 'Generating Question Kit...' : 'Generate Questions & Rubrics →'}
+                    </button>
                   </div>
                 </div>
+              )}
 
-                {generatedKit ? (
-                  <div className="space-y-6">
-                    {generatedKit.questions.map((q, idx) => (
-                      <div key={q.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                        <div className="flex justify-between items-start">
-                          <span className="text-xs font-bold px-2.5 py-1 bg-slate-100 text-slate-700 rounded-md">Q{idx + 1} • {q.category}</span>
-                          <span className="text-xs text-slate-400">{q.purpose}</span>
-                        </div>
-                        <h3 className="text-base font-bold text-slate-900">{q.question}</h3>
+              {/* QUESTION STUDIO & CHEATSHEET TAB */}
+              {activeTab === 'studio' && (
+                <div className="space-y-6">
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-4 no-print">
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-900">{generatedKit?.position || 'Question Studio'}</h2>
+                      <p className="text-xs text-slate-500">{config.seniority} • {generatedKit?.questions?.length || 0} / 10 Questions</p>
+                    </div>
 
-                        <div>
-                          <label className="block text-xs font-bold text-slate-700 mb-2">{t.scoreLabel}</label>
-                          <div className="flex space-x-2">
-                            {[1, 2, 3, 4, 5].map(score => (
-                              <button key={score} onClick={() => handleScoreChange(idx, score)} className={`flex-1 py-2 rounded-xl font-bold text-xs transition ${candidateScores[idx] === score ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>{score}</button>
-                            ))}
-                          </div>
-                        </div>
-
-                        <div>
-                          <div className="flex justify-between items-center mb-1">
-                            <label className="block text-xs font-bold text-slate-700">{t.notesLabel}</label>
-                            <button onClick={() => handleReviewAnswerWithAI(idx)} disabled={reviewingIndex === idx} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 disabled:text-slate-400">
-                              {reviewingIndex === idx ? 'Evaluating...' : t.aiReviewBtn}
-                            </button>
-                          </div>
-                          <textarea value={candidateNotes[idx] || ''} onChange={e => handleNoteChange(idx, e.target.value)} placeholder="Record candidate response notes here..." className="w-full p-3 text-xs border border-slate-200 rounded-xl bg-slate-50 h-24" />
-                        </div>
-
-                        {/* AI Answer Review Feedback Drawer */}
-                        {aiAnswerReviews[idx] && (
-                          <div className="bg-indigo-50/70 border border-indigo-100 p-4 rounded-xl text-xs space-y-2">
-                            <div className="flex justify-between font-bold text-indigo-900">
-                              <span>AI Analysis Feedback</span>
-                              <span>Suggested Score: {aiAnswerReviews[idx].suggestedScore} / 5</span>
-                            </div>
-                            <p><strong>Strengths:</strong> {aiAnswerReviews[idx].strengthsFound?.join('; ')}</p>
-                            <p><strong>Gaps:</strong> {aiAnswerReviews[idx].gapsFound?.join('; ')}</p>
-                            {aiAnswerReviews[idx].suggestedFollowUp && <p className="text-indigo-700 italic"><strong>Follow-Up Question:</strong> {aiAnswerReviews[idx].suggestedFollowUp}</p>}
-                          </div>
-                        )}
+                    <div className="flex flex-wrap items-center gap-3">
+                      <div className="bg-slate-100 p-1 rounded-xl flex space-x-1 text-xs font-bold">
+                        <button onClick={() => setStudioViewMode('studio')} className={`px-3 py-1.5 rounded-lg transition ${studioViewMode === 'studio' ? 'bg-white text-indigo-600 shadow' : 'text-slate-500'}`}>Studio View</button>
+                        <button onClick={() => setStudioViewMode('compact')} className={`px-3 py-1.5 rounded-lg transition ${studioViewMode === 'compact' ? 'bg-white text-indigo-600 shadow' : 'text-slate-500'}`}>Cheatsheet View</button>
                       </div>
-                    ))}
 
-                    <div className="flex justify-end">
-                      <button onClick={() => setActiveTab('scorecard')} className="px-8 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg transition">{t.viewScorecard}</button>
+                      {studioViewMode === 'studio' && (
+                        <button onClick={handleAddCustomQuestion} className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow transition">
+                          + Add Question
+                        </button>
+                      )}
+
+                      {studioViewMode === 'compact' && (
+                        <select value={cheatsheetDetail} onChange={e => setCheatsheetDetail(e.target.value)} className="text-xs font-bold p-2 border border-slate-300 rounded-xl bg-slate-50">
+                          <option value="only_questions">Questions Only</option>
+                          <option value="rubrics">Questions + Rubrics</option>
+                          <option value="full">Questions + Rubrics + Indicators</option>
+                        </select>
+                      )}
+
+                      <button onClick={handleCopyCheatsheet} className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow transition">
+                        {copyStatus || 'Copy Cheatsheet'}
+                      </button>
+                      <button onClick={() => window.print()} className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow transition">
+                        Print Document
+                      </button>
                     </div>
                   </div>
-                ) : (
-                  <div className="bg-white p-12 text-center rounded-2xl border border-slate-200 text-slate-500">No active interview session.</div>
-                )}
-              </div>
-            )}
 
-            {/* CANDIDATE SCORECARD TAB */}
-            {activeTab === 'scorecard' && (
-              <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-8 print-card">
-                <div className="border-b border-slate-200 pb-6 flex justify-between items-start">
-                  <div>
-                    <h2 className="text-2xl font-black text-slate-900">{config.position} — Scorecard</h2>
-                    <p className="text-xs text-slate-500 mt-1">{config.seniority}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-3xl font-black text-indigo-600">{computeOverallStats.avgScore} / 5.0</span>
-                    <p className="text-xs font-bold text-slate-400">{t.overallRating}</p>
-                  </div>
+                  {generatedKit ? (
+                    studioViewMode === 'studio' ? (
+                      /* Interactive Studio Mode with Inline Editing */
+                      <div className="space-y-6">
+                        {generatedKit.questions.map((q, idx) => (
+                          <div key={q.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                            <div className="flex justify-between items-center gap-2">
+                              <input 
+                                type="text" 
+                                value={q.category} 
+                                onChange={e => handleUpdateQuestion(idx, 'category', e.target.value)}
+                                className="text-xs font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-md border border-indigo-100" 
+                              />
+                              <div className="flex items-center space-x-2">
+                                <button onClick={() => handleRegenerateSingleQuestion(idx)} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2.5 py-1 rounded-md">
+                                  🔄 AI Swap Question
+                                </button>
+                                <button onClick={() => handleDeleteQuestion(idx)} className="text-xs font-bold text-rose-600 hover:text-rose-800 bg-rose-50 px-2.5 py-1 rounded-md">
+                                  🗑️ Delete
+                                </button>
+                              </div>
+                            </div>
+
+                            <textarea 
+                              value={q.question} 
+                              onChange={e => handleUpdateQuestion(idx, 'question', e.target.value)} 
+                              className="w-full text-base font-bold text-slate-900 border border-slate-200 rounded-xl p-3 bg-slate-50 focus:bg-white transition"
+                            />
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs">
+                              <div>
+                                <span className="font-bold text-emerald-700 block mb-1">✓ Green Flags (Strong Answer)</span>
+                                <textarea 
+                                  value={q.greenFlags?.join('\n') || ''} 
+                                  onChange={e => handleUpdateQuestion(idx, 'greenFlags', e.target.value.split('\n'))}
+                                  placeholder="One flag per line..."
+                                  className="w-full p-2 border border-slate-200 rounded-lg bg-white h-20"
+                                />
+                              </div>
+                              <div>
+                                <span className="font-bold text-rose-700 block mb-1">⚠ Red Flags (Warning Signs)</span>
+                                <textarea 
+                                  value={q.redFlags?.join('\n') || ''} 
+                                  onChange={e => handleUpdateQuestion(idx, 'redFlags', e.target.value.split('\n'))}
+                                  placeholder="One flag per line..."
+                                  className="w-full p-2 border border-slate-200 rounded-lg bg-white h-20"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2 text-xs">
+                              <span className="font-bold text-slate-700 block">Recommended Rubric Criteria:</span>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                                  <span className="font-bold text-rose-600 block mb-1">Score 1 (Poor):</span>
+                                  <input type="text" value={q.rubricMatrix?.[1] || ''} onChange={e => handleUpdateQuestion(idx, 'rubricMatrix', { ...q.rubricMatrix, 1: e.target.value })} className="w-full text-xs p-1 border border-slate-200 rounded" />
+                                </div>
+                                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                                  <span className="font-bold text-amber-600 block mb-1">Score 3 (Meets):</span>
+                                  <input type="text" value={q.rubricMatrix?.[3] || ''} onChange={e => handleUpdateQuestion(idx, 'rubricMatrix', { ...q.rubricMatrix, 3: e.target.value })} className="w-full text-xs p-1 border border-slate-200 rounded" />
+                                </div>
+                                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
+                                  <span className="font-bold text-emerald-600 block mb-1">Score 5 (Excellent):</span>
+                                  <input type="text" value={q.rubricMatrix?.[5] || ''} onChange={e => handleUpdateQuestion(idx, 'rubricMatrix', { ...q.rubricMatrix, 5: e.target.value })} className="w-full text-xs p-1 border border-slate-200 rounded" />
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        <div className="flex justify-end no-print">
+                          <button onClick={() => setActiveTab('live-interview')} className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg transition">Start Live Interview →</button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Cheatsheet View Mode */
+                      <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6 print-card">
+                        <div className="border-b border-slate-200 pb-4">
+                          <h2 className="text-2xl font-black text-slate-900">{generatedKit.position} — Cheatsheet</h2>
+                          <p className="text-xs text-slate-500 mt-1">Seniority: {generatedKit.seniority} • Questions: {generatedKit.questions.length}</p>
+                        </div>
+
+                        <div className="space-y-6">
+                          {generatedKit.questions.map((q, idx) => (
+                            <div key={q.id} className="border-b border-slate-100 pb-5 space-y-2">
+                              <div className="flex items-baseline justify-between">
+                                <h3 className="font-bold text-slate-900 text-sm">Q{idx + 1}. {q.question}</h3>
+                                <span className="text-xs font-bold text-indigo-600">[{q.category}]</span>
+                              </div>
+
+                              {cheatsheetDetail !== 'only_questions' && (
+                                <React.Fragment>
+                                  <p className="text-xs text-slate-600 italic">Purpose: {q.purpose}</p>
+                                  <div className="text-xs bg-slate-50 p-3 rounded-lg border border-slate-200 mt-2">
+                                    <strong>Rubrics:</strong> [1-Poor]: {q.rubricMatrix?.[1]} | [3-Meets]: {q.rubricMatrix?.[3]} | [5-Excellent]: {q.rubricMatrix?.[5]}
+                                  </div>
+                                </React.Fragment>
+                              )}
+
+                              {cheatsheetDetail === 'full' && (
+                                <div className="grid grid-cols-2 gap-4 text-xs mt-2">
+                                  <div><strong className="text-emerald-700">Green Flags:</strong> {q.greenFlags?.join('; ')}</div>
+                                  <div><strong className="text-rose-700">Red Flags:</strong> {q.redFlags?.join('; ')}</div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  ) : (
+                    <div className="bg-white p-12 text-center rounded-2xl border border-slate-200 text-slate-500">No question set generated yet.</div>
+                  )}
                 </div>
+              )}
 
-                <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-2xl flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-bold text-indigo-500 uppercase tracking-wider">{t.recLabel}</span>
-                    <h3 className="text-xl font-black text-indigo-950 mt-1">{computeOverallStats.recommendation}</h3>
+              {/* LIVE INTERVIEW STUDIO WITH AI ANSWER EVALUATOR */}
+              {activeTab === 'live-interview' && (
+                <div className="space-y-6">
+                  <div className="bg-white p-6 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <h2 className="text-xl font-bold text-slate-900">{generatedKit?.position || 'Live Interview'}</h2>
+                      <p className="text-xs text-slate-500">{config.seniority}</p>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs font-bold text-slate-500">AI Scrutiny Mode:</span>
+                      <select value={scrutinyMode} onChange={e => setScrutinyMode(e.target.value)} className="text-xs font-bold p-2 rounded-xl border border-slate-300 bg-slate-50">
+                        {SCRUTINY_LEVELS.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                      </select>
+                    </div>
                   </div>
-                  <button onClick={() => window.print()} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow transition no-print">{t.printScorecard}</button>
-                </div>
 
-                {/* Candidate Strengths Table */}
-                <div className="space-y-3">
-                  <h4 className="font-bold text-emerald-900 text-sm">{t.strengthsTitle}</h4>
-                  <div className="overflow-x-auto border border-emerald-200 rounded-xl">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-emerald-50 text-emerald-900 font-bold border-b border-emerald-200">
-                        <tr>
-                          <th className="p-3 w-1/4">{t.colKeyword}</th>
-                          <th className="p-3 w-1/2">{t.colEvidence}</th>
-                          <th className="p-3 w-1/4">{t.colAction}</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-emerald-100 bg-white">
-                        <tr>
-                          <td className="p-3 font-bold text-emerald-700">#StructuredExecution</td>
-                          <td className="p-3 text-slate-600">Demonstrates clear STAR methodology in problem decomposition.</td>
-                          <td className="p-3 text-slate-500">High operational capability</td>
-                        </tr>
-                        <tr>
-                          <td className="p-3 font-bold text-emerald-700">#DomainExpertise</td>
-                          <td className="p-3 text-slate-600">Strong baseline technical knowledge aligned with job criteria.</td>
-                          <td className="p-3 text-slate-500">Fast onboarding curve</td>
-                        </tr>
-                        <tr>
-                          <td className="p-3 font-bold text-emerald-700">#Communication</td>
-                          <td className="p-3 text-slate-600">Articulates technical choices directly without excessive jargon.</td>
-                          <td className="p-3 text-slate-500">Strong team collaboration</td>
-                        </tr>
-                      </tbody>
-                    </table>
+                  {generatedKit ? (
+                    <div className="space-y-6">
+                      {generatedKit.questions.map((q, idx) => (
+                        <div key={q.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                          <div className="flex justify-between items-start">
+                            <span className="text-xs font-bold px-2.5 py-1 bg-slate-100 text-slate-700 rounded-md">Q{idx + 1} • {q.category}</span>
+                            <span className="text-xs text-slate-400">{q.purpose}</span>
+                          </div>
+                          <h3 className="text-base font-bold text-slate-900">{q.question}</h3>
+
+                          <div>
+                            <label className="block text-xs font-bold text-slate-700 mb-2">Score Candidate Response (1 to 5):</label>
+                            <div className="flex space-x-2">
+                              {[1, 2, 3, 4, 5].map(score => (
+                                <button key={score} onClick={() => handleScoreChange(idx, score)} className={`flex-1 py-2 rounded-xl font-bold text-xs transition ${candidateScores[idx] === score ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>{score}</button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div>
+                            <div className="flex justify-between items-center mb-1">
+                              <label className="block text-xs font-bold text-slate-700">Interviewer Notes & Answer Transcript:</label>
+                              <button onClick={() => handleReviewAnswerWithAI(idx)} disabled={reviewingIndex === idx} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 disabled:text-slate-400">
+                                {reviewingIndex === idx ? 'Evaluating...' : 'AI Review Answer'}
+                              </button>
+                            </div>
+                            <textarea value={candidateNotes[idx] || ''} onChange={e => handleNoteChange(idx, e.target.value)} placeholder="Record candidate response notes here..." className="w-full p-3 text-xs border border-slate-200 rounded-xl bg-slate-50 h-24" />
+                          </div>
+
+                          {/* AI Answer Review Feedback Drawer */}
+                          {aiAnswerReviews[idx] && (
+                            <div className="bg-indigo-50/70 border border-indigo-100 p-4 rounded-xl text-xs space-y-2">
+                              <div className="flex justify-between font-bold text-indigo-900">
+                                <span>AI Analysis Feedback</span>
+                                <span>Suggested Score: {aiAnswerReviews[idx].suggestedScore} / 5</span>
+                              </div>
+                              <p><strong>Strengths:</strong> {aiAnswerReviews[idx].strengthsFound?.join('; ')}</p>
+                              <p><strong>Gaps:</strong> {aiAnswerReviews[idx].gapsFound?.join('; ')}</p>
+                              {aiAnswerReviews[idx].suggestedFollowUp && <p className="text-indigo-700 italic"><strong>Follow-Up Question:</strong> {aiAnswerReviews[idx].suggestedFollowUp}</p>}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+
+                      <div className="flex justify-end">
+                        <button onClick={() => setActiveTab('scorecard')} className="px-8 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg transition">View Candidate Scorecard →</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-white p-12 text-center rounded-2xl border border-slate-200 text-slate-500">No active interview session.</div>
+                  )}
+                </div>
+              )}
+
+              {/* CANDIDATE SCORECARD TAB */}
+              {activeTab === 'scorecard' && (
+                <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-8 print-card">
+                  <div className="border-b border-slate-200 pb-6 flex justify-between items-start">
+                    <div>
+                      <h2 className="text-2xl font-black text-slate-900">{config.position} — Scorecard</h2>
+                      <p className="text-xs text-slate-500 mt-1">{config.seniority}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-3xl font-black text-indigo-600">{computeOverallStats.avgScore} / 5.0</span>
+                      <p className="text-xs font-bold text-slate-400">Average Candidate Rating</p>
+                    </div>
                   </div>
-                </div>
 
-                {/* Candidate Areas for Improvement Table */}
-                <div className="space-y-3">
-                  <h4 className="font-bold text-rose-900 text-sm">{t.improvementsTitle}</h4>
-                  <div className="overflow-x-auto border border-rose-200 rounded-xl">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-rose-50 text-rose-900 font-bold border-b border-rose-200">
-                        <tr>
-                          <th className="p-3 w-1/4">{t.colKeyword}</th>
-                          <th className="p-3 w-1/2">{t.colEvidence}</th>
-                          <th className="p-3 w-1/4">{t.colAction}</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-rose-100 bg-white">
-                        <tr>
-                          <td className="p-3 font-bold text-rose-700">#QuantifiedMetrics</td>
-                          <td className="p-3 text-slate-600">Could provide more hard business impact data in examples.</td>
-                          <td className="p-3 text-slate-500">Coach on ROI metrics</td>
-                        </tr>
-                        <tr>
-                          <td className="p-3 font-bold text-rose-700">#EdgeCaseHandling</td>
-                          <td className="p-3 text-slate-600">Deeper elaboration needed for risk mitigation strategies.</td>
-                          <td className="p-3 text-slate-500">Pair with senior mentor</td>
-                        </tr>
-                        <tr>
-                          <td className="p-3 font-bold text-rose-700">#DelegationDepth</td>
-                          <td className="p-3 text-slate-600">Tends to focus heavily on individual effort rather than team scale.</td>
-                          <td className="p-3 text-slate-500">Leadership development</td>
-                        </tr>
-                      </tbody>
-                    </table>
+                  <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-2xl flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-indigo-500 uppercase tracking-wider">Automated Recommendation</span>
+                      <h3 className="text-xl font-black text-indigo-950 mt-1">{computeOverallStats.recommendation}</h3>
+                    </div>
+                    <button onClick={() => window.print()} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow transition no-print">Print Candidate PDF</button>
                   </div>
-                </div>
-              </div>
-            )}
 
-            {/* ABOUT & API KEY GUIDE TAB */}
-            {activeTab === 'about' && (
-              <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-8">
-                <div>
-                  <h2 className="text-2xl font-black text-slate-900">{t.about}</h2>
-                  <p className="text-xs text-slate-500 mt-1">AI-powered interview question generator & candidate evaluation platform.</p>
-                </div>
+                  {/* Candidate Strengths Table */}
+                  <div className="space-y-3">
+                    <h4 className="font-bold text-emerald-900 text-sm">Top 3 Identified Candidate Strengths</h4>
+                    <div className="overflow-x-auto border border-emerald-200 rounded-xl">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-emerald-50 text-emerald-900 font-bold border-b border-emerald-200">
+                          <tr>
+                            <th className="p-3 w-1/4">Keyword</th>
+                            <th className="p-3 w-1/2">Observed Evidence / Response</th>
+                            <th className="p-3 w-1/4">Impact / Recommendation</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-emerald-100 bg-white">
+                          <tr>
+                            <td className="p-3 font-bold text-emerald-700">#StructuredExecution</td>
+                            <td className="p-3 text-slate-600">Demonstrates clear STAR methodology in problem decomposition.</td>
+                            <td className="p-3 text-slate-500">High operational capability</td>
+                          </tr>
+                          <tr>
+                            <td className="p-3 font-bold text-emerald-700">#DomainExpertise</td>
+                            <td className="p-3 text-slate-600">Strong baseline technical knowledge aligned with job criteria.</td>
+                            <td className="p-3 text-slate-500">Fast onboarding curve</td>
+                          </tr>
+                          <tr>
+                            <td className="p-3 font-bold text-emerald-700">#Communication</td>
+                            <td className="p-3 text-slate-600">Articulates technical choices directly without excessive jargon.</td>
+                            <td className="p-3 text-slate-500">Strong team collaboration</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
 
-                {/* Free API Key Options Guide */}
-                <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
-                  <h3 className="font-bold text-slate-900 text-sm">🔑 Where & How to Get Free AI API Keys</h3>
-                  <div className="space-y-3 text-xs text-slate-600 leading-relaxed">
-                    <div className="bg-white p-4 rounded-xl border border-slate-200">
-                      <strong className="text-indigo-600 block text-sm mb-1">1. Google AI Studio (Recommended — 100% Free)</strong>
-                      <p>Google provides a free tier for Gemini 2.5 Flash with generous limits (up to 15 requests per minute).</p>
-                      <ul className="list-disc list-inside mt-2 space-y-1 text-slate-500">
-                        <li>Visit <a href="https://aistudio.google.com/" target="_blank" className="text-indigo-600 underline font-semibold">aistudio.google.com</a>.</li>
-                        <li>Log in with any standard Google account.</li>
-                        <li>Click <strong>"Create API Key"</strong> and copy your key.</li>
-                        <li>Paste your key into the <strong>Set Gemini Key</strong> modal in InterviewMate.</li>
-                      </ul>
+                  {/* Candidate Areas for Improvement Table */}
+                  <div className="space-y-3">
+                    <h4 className="font-bold text-rose-900 text-sm">Top 3 Areas for Improvement</h4>
+                    <div className="overflow-x-auto border border-rose-200 rounded-xl">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-rose-50 text-rose-900 font-bold border-b border-rose-200">
+                          <tr>
+                            <th className="p-3 w-1/4">Keyword</th>
+                            <th className="p-3 w-1/2">Observed Evidence / Response</th>
+                            <th className="p-3 w-1/4">Impact / Recommendation</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-rose-100 bg-white">
+                          <tr>
+                            <td className="p-3 font-bold text-rose-700">#QuantifiedMetrics</td>
+                            <td className="p-3 text-slate-600">Could provide more hard business impact data in examples.</td>
+                            <td className="p-3 text-slate-500">Coach on ROI metrics</td>
+                          </tr>
+                          <tr>
+                            <td className="p-3 font-bold text-rose-700">#EdgeCaseHandling</td>
+                            <td className="p-3 text-slate-600">Deeper elaboration needed for risk mitigation strategies.</td>
+                            <td className="p-3 text-slate-500">Pair with senior mentor</td>
+                          </tr>
+                          <tr>
+                            <td className="p-3 font-bold text-rose-700">#DelegationDepth</td>
+                            <td className="p-3 text-slate-600">Tends to focus heavily on individual effort rather than team scale.</td>
+                            <td className="p-3 text-slate-500">Leadership development</td>
+                          </tr>
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 </div>
+              )}
 
-                {/* Encouraging Closing Card with Animated Pretzel */}
-                <div className="bg-gradient-to-r from-indigo-900 to-slate-900 text-white p-6 rounded-2xl text-center space-y-2 shadow-md">
-                  <p className="text-lg font-bold">{t.closingMsg} <span className="pretzel-anim">🥨</span></p>
-                  <p className="text-xs text-slate-300">Good luck with your structured interview sessions!</p>
+              {/* ABOUT & MULTI-PROVIDER FREE API GUIDE TAB */}
+              {activeTab === 'about' && (
+                <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-8">
+                  <div>
+                    <h2 className="text-2xl font-black text-slate-900">About & Free API Guide</h2>
+                    <p className="text-xs text-slate-500 mt-1">AI-powered interview question generator & candidate evaluation platform.</p>
+                  </div>
+
+                  {/* Multi-Provider Free API Guide */}
+                  <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-4">
+                    <h3 className="font-bold text-slate-900 text-sm">🔑 Options for Free AI API Keys</h3>
+                    <div className="space-y-4 text-xs text-slate-600 leading-relaxed">
+                      <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <strong className="text-indigo-600 block text-sm mb-1">1. Google AI Studio (Recommended — Free Tier)</strong>
+                        <p>Google provides a 100% free API tier for Gemini 2.5 Flash with up to 15 requests/minute.</p>
+                        <ul className="list-disc list-inside mt-2 space-y-1 text-slate-500">
+                          <li>Go to <a href="https://aistudio.google.com/" target="_blank" className="text-indigo-600 underline font-semibold">aistudio.google.com</a></li>
+                          <li>Sign in with your Google account and click <strong>"Create API Key"</strong>.</li>
+                          <li>Paste the key into InterviewMate's API Key modal.</li>
+                        </ul>
+                      </div>
+
+                      <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <strong className="text-indigo-600 block text-sm mb-1">2. Groq Cloud (Free Developer Tier)</strong>
+                        <p>Groq provides free ultra-fast access to open models like Llama 3 and Mixtral.</p>
+                        <ul className="list-disc list-inside mt-2 space-y-1 text-slate-500">
+                          <li>Visit <a href="https://console.groq.com/" target="_blank" className="text-indigo-600 underline font-semibold">console.groq.com</a></li>
+                          <li>Sign up for a free developer account and navigate to <strong>API Keys</strong>.</li>
+                        </ul>
+                      </div>
+
+                      <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <strong className="text-indigo-600 block text-sm mb-1">3. OpenRouter (Free & Open Weights Gateway)</strong>
+                        <p>OpenRouter offers access to free-tier open models with zero cost setups.</p>
+                        <ul className="list-disc list-inside mt-2 space-y-1 text-slate-500">
+                          <li>Visit <a href="https://openrouter.ai/" target="_blank" className="text-indigo-600 underline font-semibold">openrouter.ai</a></li>
+                          <li>Create a key under Account Keys and filter by free model endpoints.</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-          </main>
+            </main>
+          </div>
+
+          {/* Persistent Footer with Wiggling Pretzel Emoji */}
+          <footer className="bg-slate-900 text-slate-400 border-t border-slate-800 py-6 px-6 text-center text-xs no-print">
+            <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
+              <p className="font-medium">InterviewMate — AI Question Generator & Candidate Evaluation Platform</p>
+              <p className="text-slate-300 font-bold text-sm">
+                Semangat ya ❤️ <span className="pretzel-anim">🥨</span>
+              </p>
+            </div>
+          </footer>
 
           {/* Edit Preset Modal */}
           {editingPreset && (
@@ -1023,13 +1015,13 @@ Return ONLY valid JSON in ${targetLang} matching this structure:
             </div>
           )}
 
-          {/* API Key Modal */}
+          {/* Multi-Provider API Key Modal */}
           {showApiKeyModal && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
               <div className="bg-white max-w-md w-full p-6 rounded-3xl shadow-2xl space-y-4">
-                <h3 className="text-lg font-bold text-slate-900">Configure Gemini API Key</h3>
-                <p className="text-xs text-slate-500">Get a 100% free key at <strong>aistudio.google.com</strong>. Saved strictly in your local browser storage.</p>
-                <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="AIzaSy..." className="w-full p-3 border border-slate-300 rounded-xl text-sm font-mono bg-slate-50" />
+                <h3 className="text-lg font-bold text-slate-900">Configure AI API Key</h3>
+                <p className="text-xs text-slate-500">Get free keys from <strong>Google AI Studio</strong> (aistudio.google.com), <strong>Groq</strong> (console.groq.com), or <strong>OpenRouter</strong> (openrouter.ai).</p>
+                <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="API Key (e.g., AIzaSy...)" className="w-full p-3 border border-slate-300 rounded-xl text-sm font-mono bg-slate-50" />
                 <div className="flex justify-end space-x-3">
                   <button onClick={() => setShowApiKeyModal(false)} className="px-4 py-2 text-xs font-bold text-slate-500">Cancel</button>
                   <button onClick={() => { handleSaveApiKey(apiKey); setShowApiKeyModal(false); }} className="px-5 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl shadow">Save Key</button>

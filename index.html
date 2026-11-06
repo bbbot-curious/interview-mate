@@ -63,6 +63,11 @@
       { id: 'preset-3', title: 'Financial Analyst', department: 'Finance & Accounting', position: 'Financial Analyst', seniority: 'Mid-Level', composition: { Technical: 3, Competency: 2 }, additionalContext: 'Financial Modeling, DCF Valuation, Budget Forecasting, and Advanced Excel.' }
     ];
 
+    const DEFAULT_SESSIONS = [
+      { id: 'sess-1', position: 'Senior Full Stack Developer', date: '2026-11-02', avgScore: 4.2, questionCount: 5, competencies: ['System Architecture', 'React 18', 'Code Refactoring'], companyValues: ['Execution Excellence', 'Team Collaboration'] },
+      { id: 'sess-2', position: 'HR Business Partner', date: '2026-11-04', avgScore: 3.8, questionCount: 5, competencies: ['Conflict Resolution', 'Leadership Coaching'], companyValues: ['Integrity', 'People-First'] }
+    ];
+
     function App() {
       const [activeTab, setActiveTab] = useState('dashboard');
       const [outputLang, setOutputLang] = useState('en'); // 'en' | 'id'
@@ -72,10 +77,16 @@
       const [showApiKeyModal, setShowApiKeyModal] = useState(false);
       const [scrutinyMode, setScrutinyMode] = useState('balanced');
       const [copyStatus, setCopyStatus] = useState('');
+      const [apiStatusMessage, setApiStatusMessage] = useState('');
       
       const [presets, setPresets] = useState(() => {
         const saved = localStorage.getItem('interviewmate_presets');
         return saved ? JSON.parse(saved) : DEFAULT_PRESETS;
+      });
+
+      const [savedSessions, setSavedSessions] = useState(() => {
+        const saved = localStorage.getItem('interviewmate_sessions');
+        return saved ? JSON.parse(saved) : DEFAULT_SESSIONS;
       });
 
       const [editingPreset, setEditingPreset] = useState(null);
@@ -103,10 +114,36 @@
       const [reviewingIndex, setReviewingIndex] = useState(null);
       const [isGenerating, setIsGenerating] = useState(false);
 
-      // Total composition ceiling (10 max)
+      // Total composition count (10 max)
       const totalQuestionsCount = useMemo(() => {
         return Object.values(config.composition).reduce((a, b) => a + Number(b), 0);
       }, [config.composition]);
+
+      // Calculate Dashboard Analytics Metrics
+      const dashboardStats = useMemo(() => {
+        const totalInterviewed = savedSessions.length;
+        const totalQuestions = savedSessions.reduce((sum, s) => sum + (s.questionCount || 5), 0);
+        const avgScore = totalInterviewed > 0 
+          ? (savedSessions.reduce((sum, s) => sum + Number(s.avgScore), 0) / totalInterviewed).toFixed(1)
+          : '0.0';
+        
+        const positionsList = Array.from(new Set(savedSessions.map(s => s.position)));
+
+        const competenciesSet = new Set();
+        savedSessions.forEach(s => (s.competencies || ['Technical Depth', 'STAR Method', 'Problem Solving']).forEach(c => competenciesSet.add(c)));
+
+        const valuesSet = new Set();
+        savedSessions.forEach(s => (s.companyValues || ['Execution Excellence', 'Integrity', 'Team Collaboration']).forEach(v => valuesSet.add(v)));
+
+        return {
+          totalInterviewed,
+          totalQuestions,
+          avgScore,
+          positionsList,
+          competencies: Array.from(competenciesSet),
+          companyValues: Array.from(valuesSet)
+        };
+      }, [savedSessions]);
 
       const handleCompositionChange = (type, val) => {
         const parsedVal = Math.max(0, parseInt(val) || 0);
@@ -177,7 +214,7 @@
         if (apiKey) {
           try {
             const prompt = `Generate 1 alternative ${qToReplace.category} interview question in ${targetLangStr} for a ${generatedKit.seniority} level ${generatedKit.position}.
-Return ONLY valid JSON matching:
+Return ONLY valid JSON:
 {
   "category": "${qToReplace.category}",
   "question": "Question text",
@@ -191,10 +228,10 @@ Return ONLY valid JSON matching:
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
             });
-            if (!res.ok) throw new Error(`API HTTP status ${res.status}`);
+            if (!res.ok) throw new Error(`HTTP error ${res.status}`);
             const data = await res.json();
             const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!textResponse) throw new Error("Invalid API payload");
+            if (!textResponse) throw new Error("Empty response");
             const parsed = JSON.parse(textResponse.replace(/```json/g, '').replace(/```/g, '').trim());
             
             const updatedQuestions = [...generatedKit.questions];
@@ -202,7 +239,7 @@ Return ONLY valid JSON matching:
             setGeneratedKit({ ...generatedKit, questions: updatedQuestions });
             return;
           } catch(err) {
-            console.warn("Single regen fallback", err);
+            console.warn("Single question regeneration fallback", err);
           }
         }
 
@@ -244,10 +281,10 @@ Analyze the notes in ${targetLangStr}. Return ONLY valid JSON:
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
             });
-            if (!res.ok) throw new Error(`API HTTP status ${res.status}`);
+            if (!res.ok) throw new Error(`HTTP error ${res.status}`);
             const data = await res.json();
             const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!textResponse) throw new Error("Invalid API payload");
+            if (!textResponse) throw new Error("Empty response");
             const parsed = JSON.parse(textResponse.replace(/```json/g, '').replace(/```/g, '').trim());
 
             setAiAnswerReviews(prev => ({ ...prev, [qIndex]: parsed }));
@@ -325,14 +362,35 @@ Analyze the notes in ${targetLangStr}. Return ONLY valid JSON:
         return { avgScore: avg, count: scores.length, recommendation };
       }, [candidateScores, outputLang]);
 
+      // Save evaluation session to dashboard analytics
+      const handleSaveSessionToDashboard = () => {
+        if (!generatedKit) return;
+        const newSession = {
+          id: `sess-${Date.now()}`,
+          position: generatedKit.position,
+          date: new Date().toISOString().split('T')[0],
+          avgScore: Number(computeOverallStats.avgScore),
+          questionCount: generatedKit.questions.length,
+          competencies: ['STAR Execution', 'Technical Depth', 'System Reasoning'],
+          companyValues: ['Execution Excellence', 'Integrity', 'Team Alignment']
+        };
+        const updated = [newSession, ...savedSessions];
+        setSavedSessions(updated);
+        localStorage.setItem('interviewmate_sessions', JSON.stringify(updated));
+        alert('Candidate evaluation session saved to dashboard analytics!');
+      };
+
       const generateInterviewQuestions = async () => {
         setIsGenerating(true);
-        // Clean previous session evaluations
         setCandidateScores({});
         setCandidateNotes({});
         setAiAnswerReviews({});
 
-        const targetPosition = config.department === 'Other / Custom' ? (config.customPosition || 'Custom Role') : config.position;
+        // Custom position resolution logic
+        const targetPosition = (config.department === 'Other / Custom' || config.position === 'Custom Position') 
+          ? (config.customPosition || 'Custom Position') 
+          : config.position;
+          
         const targetLangStr = outputLang === 'id' ? 'Bahasa Indonesia' : 'English';
         
         const compositionText = Object.entries(config.composition)
@@ -342,6 +400,7 @@ Analyze the notes in ${targetLangStr}. Return ONLY valid JSON:
 
         if (apiKey) {
           try {
+            setApiStatusMessage('Connecting to Gemini 2.5 Flash...');
             const prompt = `Generate a structured interview question kit strictly in ${targetLangStr} for a ${config.seniority} level ${targetPosition} in ${config.department}.
 Composition: ${compositionText} (Total ${totalQuestionsCount} questions, max 10).
 Context: ${config.additionalContext}
@@ -371,11 +430,11 @@ Return ONLY valid JSON in ${targetLangStr} matching:
               body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
             });
 
-            if (!res.ok) throw new Error(`API HTTP status ${res.status}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status} from Gemini API`);
             const data = await res.json();
             const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!textResponse) throw new Error("Invalid API payload format");
-            
+            if (!textResponse) throw new Error("Received empty payload from Gemini API");
+
             const cleanedJson = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
             const parsed = JSON.parse(cleanedJson);
 
@@ -384,12 +443,16 @@ Return ONLY valid JSON in ${targetLangStr} matching:
               seniority: config.seniority,
               questions: parsed.questions.slice(0, 10)
             });
+            setApiStatusMessage('Generated via Live Gemini AI');
             setActiveTab('studio');
             setIsGenerating(false);
             return;
           } catch (err) {
-            console.warn("AI Generation fallback triggered:", err);
+            console.warn("AI Generation fallback triggered due to error:", err);
+            setApiStatusMessage('API Error: Switched to offline generator fallback');
           }
+        } else {
+          setApiStatusMessage('No API Key: Using offline generator fallback');
         }
 
         // Offline Fallback Generator
@@ -468,73 +531,79 @@ Return ONLY valid JSON in ${targetLangStr} matching:
             {/* Main Workspace */}
             <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8">
 
-              {/* DASHBOARD TAB (Informative SaaS Hub) */}
+              {/* DASHBOARD TAB (Informative SaaS Hub with Detailed Analytics) */}
               {activeTab === 'dashboard' && (
                 <div className="space-y-8">
                   {/* Hero Banner */}
                   <div className="bg-gradient-to-r from-indigo-900 via-slate-900 to-slate-900 text-white p-8 rounded-3xl shadow-xl border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <div className="space-y-3 max-w-2xl">
                       <span className="text-xs font-bold px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-full border border-indigo-500/30">AI-Powered Hiring Studio</span>
-                      <h2 className="text-3xl font-extrabold">Structured Interviewing Made Simple & Objective</h2>
-                      <p className="text-slate-300 text-sm leading-relaxed">Generate role-tailored question sets (up to 10), conduct live interviews with anti-inflation scrutiny, and export executive scorecards.</p>
+                      <h2 className="text-3xl font-extrabold">Structured Hiring & Candidate Analytics</h2>
+                      <p className="text-slate-300 text-sm leading-relaxed">Generate role-tailored question sets, conduct live interviews with anti-inflation scrutiny, and track evaluation analytics.</p>
                     </div>
                     <button onClick={() => setActiveTab('generator')} className="px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm rounded-xl shadow-lg transition whitespace-nowrap">
                       Start New Interview →
                     </button>
                   </div>
 
-                  {/* Informative Platform Metrics Grid */}
+                  {/* Comprehensive Analytics Metrics Bar */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-1">
-                      <span className="text-xs font-bold text-slate-400 uppercase">Question Cap</span>
-                      <p className="text-2xl font-black text-slate-900">10 Max</p>
-                      <p className="text-xs text-slate-500">Custom composition per set</p>
+                      <span className="text-xs font-bold text-slate-400 uppercase">Candidates Interviewed</span>
+                      <p className="text-3xl font-black text-slate-900">{dashboardStats.totalInterviewed}</p>
+                      <p className="text-xs text-slate-500">Evaluated candidates</p>
                     </div>
                     <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-1">
-                      <span className="text-xs font-bold text-slate-400 uppercase">AI Scrutiny Tiers</span>
-                      <p className="text-2xl font-black text-indigo-600">4 Tiers</p>
-                      <p className="text-xs text-slate-500">Lenient to Ruthless / Bar Raiser</p>
+                      <span className="text-xs font-bold text-slate-400 uppercase">Global Average Rating</span>
+                      <p className="text-3xl font-black text-indigo-600">{dashboardStats.avgScore} / 5.0</p>
+                      <p className="text-xs text-slate-500">Across all sessions</p>
                     </div>
                     <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-1">
-                      <span className="text-xs font-bold text-slate-400 uppercase">Output Languages</span>
-                      <p className="text-2xl font-black text-emerald-600">EN & ID</p>
-                      <p className="text-xs text-slate-500">English & Bahasa Indonesia</p>
+                      <span className="text-xs font-bold text-slate-400 uppercase">Questions Generated</span>
+                      <p className="text-3xl font-black text-emerald-600">{dashboardStats.totalQuestions}</p>
+                      <p className="text-xs text-slate-500">Across tailored kits</p>
                     </div>
                     <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-1">
-                      <span className="text-xs font-bold text-slate-400 uppercase">Cheatsheet Modes</span>
-                      <p className="text-2xl font-black text-amber-600">3 Views</p>
-                      <p className="text-xs text-slate-500">Questions, Rubrics & Flags</p>
+                      <span className="text-xs font-bold text-slate-400 uppercase">Roles Evaluated</span>
+                      <p className="text-3xl font-black text-amber-600">{dashboardStats.positionsList.length}</p>
+                      <p className="text-xs text-slate-500">Distinct job titles</p>
                     </div>
                   </div>
 
-                  {/* Interactive Workflow Spotlight */}
-                  <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
-                    <h3 className="text-lg font-bold text-slate-900">Application Workflow & Capabilities</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
-                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
-                        <span className="w-7 h-7 rounded-lg bg-indigo-600 text-white font-bold flex items-center justify-center text-xs">1</span>
-                        <h4 className="font-bold text-slate-900 text-sm">Question Generator</h4>
-                        <p className="text-slate-500">Select department, position, seniority, and compose your kit mix (General, Technical, Behavioral, etc.).</p>
+                  {/* Informative Breakdown Sections: Competencies, Company Values, and Positions */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Positions Breakdown */}
+                    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-3">
+                      <h3 className="font-bold text-slate-900 text-sm">Positions Interviewed</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {dashboardStats.positionsList.map((pos, idx) => (
+                          <span key={idx} className="text-xs font-bold px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-xl border border-indigo-100">{pos}</span>
+                        ))}
                       </div>
-                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
-                        <span className="w-7 h-7 rounded-lg bg-indigo-600 text-white font-bold flex items-center justify-center text-xs">2</span>
-                        <h4 className="font-bold text-slate-900 text-sm">Studio & Cheatsheets</h4>
-                        <p className="text-slate-500">Edit, swap questions with AI, add custom questions, or switch to Cheatsheet View to copy & print notes.</p>
+                    </div>
+
+                    {/* Competencies Focused On */}
+                    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-3">
+                      <h3 className="font-bold text-slate-900 text-sm">Competencies Assessed</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {dashboardStats.competencies.map((comp, idx) => (
+                          <span key={idx} className="text-xs font-bold px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-xl border border-emerald-100">{comp}</span>
+                        ))}
                       </div>
-                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
-                        <span className="w-7 h-7 rounded-lg bg-indigo-600 text-white font-bold flex items-center justify-center text-xs">3</span>
-                        <h4 className="font-bold text-slate-900 text-sm">Live Answer Review</h4>
-                        <p className="text-slate-500">Score candidate answers (1-5) and let AI analyze transcript notes using your selected Scrutiny Mode.</p>
-                      </div>
-                      <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
-                        <span className="w-7 h-7 rounded-lg bg-indigo-600 text-white font-bold flex items-center justify-center text-xs">4</span>
-                        <h4 className="font-bold text-slate-900 text-sm">Executive Scorecard</h4>
-                        <p className="text-slate-500">View automated average ratings, hiring recommendation badges, and Top 3 Strengths/Improvements tables.</p>
+                    </div>
+
+                    {/* Company Values Alignment */}
+                    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-3">
+                      <h3 className="font-bold text-slate-900 text-sm">Company Values Evaluated</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {dashboardStats.companyValues.map((val, idx) => (
+                          <span key={idx} className="text-xs font-bold px-3 py-1.5 bg-amber-50 text-amber-800 rounded-xl border border-amber-100">{val}</span>
+                        ))}
                       </div>
                     </div>
                   </div>
 
-                  {/* Presets Grid */}
+                  {/* Quick Launch Presets Grid */}
                   <div>
                     <div className="flex justify-between items-center mb-4">
                       <h3 className="text-xl font-bold text-slate-900">Quick Launch Presets</h3>
@@ -586,6 +655,20 @@ Return ONLY valid JSON in ${targetLangStr} matching:
                       </select>
                     </div>
 
+                    {/* Restored Custom Position Text Input Field */}
+                    {(config.department === 'Other / Custom' || config.position === 'Custom Position') && (
+                      <div className="bg-indigo-50/60 p-4 rounded-2xl border border-indigo-100 space-y-2">
+                        <label className="block text-xs font-bold text-indigo-900">Specify Custom Job Title</label>
+                        <input 
+                          type="text" 
+                          value={config.customPosition} 
+                          onChange={e => setConfig({ ...config, customPosition: e.target.value })} 
+                          placeholder="e.g. Lead AI Engineer, Chief Staff Officer, Risk Analyst..." 
+                          className="w-full p-3 border border-indigo-200 rounded-xl bg-white text-sm font-semibold text-slate-900"
+                        />
+                      </div>
+                    )}
+
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-2">Seniority Level</label>
                       <select value={config.seniority} onChange={e => setConfig({ ...config, seniority: e.target.value })} className="w-full p-3 border border-slate-300 rounded-xl bg-slate-50 text-sm font-medium">
@@ -621,7 +704,7 @@ Return ONLY valid JSON in ${targetLangStr} matching:
 
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-2">Additional Context / Special Requirements</label>
-                      <textarea value={config.additionalContext} onChange={e => setConfig({ ...config, additionalContext: e.target.value })} placeholder="e.g. Focus on leadership, system design, high concurrency, and conflict resolution..." className="w-full p-3 border border-slate-300 rounded-xl bg-slate-50 h-24 text-sm" />
+                      <textarea value={config.additionalContext} onChange={e => setConfig({ ...config, additionalContext: e.target.value })} placeholder="e.g. Focus on leadership under pressure, system design, high concurrency, and conflict resolution..." className="w-full p-3 border border-slate-300 rounded-xl bg-slate-50 h-24 text-sm" />
                     </div>
 
                     <button onClick={generateInterviewQuestions} disabled={isGenerating || totalQuestionsCount === 0} className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-400 text-white font-bold rounded-xl shadow-lg transition">
@@ -637,7 +720,7 @@ Return ONLY valid JSON in ${targetLangStr} matching:
                   <div className="bg-white p-6 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-4 no-print">
                     <div>
                       <h2 className="text-xl font-bold text-slate-900">{generatedKit?.position || 'Question Studio'}</h2>
-                      <p className="text-xs text-slate-500">{config.seniority} • {generatedKit?.questions?.length || 0} / 10 Questions</p>
+                      <p className="text-xs text-slate-500">{config.seniority} • {generatedKit?.questions?.length || 0} / 10 Questions {apiStatusMessage && `• ${apiStatusMessage}`}</p>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3">
@@ -869,12 +952,15 @@ Return ONLY valid JSON in ${targetLangStr} matching:
                     </div>
                   </div>
 
-                  <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-2xl flex items-center justify-between">
+                  <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-2xl flex flex-wrap items-center justify-between gap-4">
                     <div>
                       <span className="text-xs font-bold text-indigo-500 uppercase tracking-wider">Automated Recommendation</span>
                       <h3 className="text-xl font-black text-indigo-950 mt-1">{computeOverallStats.recommendation}</h3>
                     </div>
-                    <button onClick={() => window.print()} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow transition no-print">Print Candidate PDF</button>
+                    <div className="flex space-x-3 no-print">
+                      <button onClick={handleSaveSessionToDashboard} className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow transition">Save to Dashboard Analytics</button>
+                      <button onClick={() => window.print()} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow transition">Print Candidate PDF</button>
+                    </div>
                   </div>
 
                   {/* Candidate Strengths Table */}

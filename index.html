@@ -145,6 +145,7 @@
       const [scrutinyMode, setScrutinyMode] = useState('balanced');
       const [copyStatus, setCopyStatus] = useState('');
       const [apiStatusMessage, setApiStatusMessage] = useState('');
+      const [apiErrorMessage, setApiErrorMessage] = useState('');
 
       // Pretzel Cat Easter Egg State
       const [showCatModal, setShowCatModal] = useState(false);
@@ -274,6 +275,7 @@
       const handleSaveApiKey = (key) => {
         setApiKey(key);
         localStorage.setItem('interviewmate_gemini_key', key);
+        setApiErrorMessage('');
       };
 
       const handleScoreChange = (qIndex, score) => {
@@ -327,25 +329,28 @@
         if (apiKey) {
           try {
             const prompt = `Generate 1 alternative ${qToReplace.category} interview question in ${targetLangStr} for a ${generatedKit.seniority} level ${generatedKit.position}. Ensure it is completely distinct.
-Return ONLY valid JSON:
+Return ONLY raw JSON matching:
 {
   "category": "${qToReplace.category}",
   "question": "Question text",
   "purpose": "Purpose",
   "greenFlags": ["Flag 1", "Flag 2"],
   "redFlags": ["Flag 1", "Flag 2"],
-  "rubricMatrix": {"1": "Poor", "3": "Meets", "5": "Excellent"}
+  "rubricMatrix": {"1": "Poor description", "3": "Meets expectations description", "5": "Excellent description"}
 }`;
             const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { responseMimeType: "application/json" }
+              })
             });
             if (!res.ok) throw new Error(`HTTP error ${res.status}`);
             const data = await res.json();
             const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
             if (!textResponse) throw new Error("Empty response");
-            const parsed = JSON.parse(textResponse.replace(/```json/g, '').replace(/```/g, '').trim());
+            const parsed = JSON.parse(textResponse);
             
             const updatedQuestions = [...generatedKit.questions];
             updatedQuestions[qIndex] = { ...parsed, id: `q-regen-${Date.now()}` };
@@ -382,7 +387,7 @@ Question: "${questionObj.question}"
 Candidate Transcript Notes: "${note}"
 Rubrics: Score 1: ${questionObj.rubricMatrix[1]}, Score 3: ${questionObj.rubricMatrix[3]}, Score 5: ${questionObj.rubricMatrix[5]}
 
-Analyze in ${targetLangStr}. Return ONLY valid JSON:
+Analyze in ${targetLangStr}. Return ONLY raw JSON:
 {
   "suggestedScore": 3,
   "strengthsFound": ["Strength 1", "Strength 2"],
@@ -392,13 +397,16 @@ Analyze in ${targetLangStr}. Return ONLY valid JSON:
             const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: { responseMimeType: "application/json" }
+              })
             });
             if (!res.ok) throw new Error(`HTTP error ${res.status}`);
             const data = await res.json();
             const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
             if (!textResponse) throw new Error("Empty response");
-            const parsed = JSON.parse(textResponse.replace(/```json/g, '').replace(/```/g, '').trim());
+            const parsed = JSON.parse(textResponse);
 
             setAiAnswerReviews(prev => ({ ...prev, [qIndex]: parsed }));
             if (parsed.suggestedScore) handleScoreChange(qIndex, parsed.suggestedScore);
@@ -431,7 +439,7 @@ Analyze in ${targetLangStr}. Return ONLY valid JSON:
           
           if (cheatsheetDetail !== 'only_questions') {
             text += `Purpose: ${q.purpose}\n`;
-            text += `Rubric Scores:\n`;
+            text += `Recommended Rubric Matrix:\n`;
             text += `  [1 - Poor]: ${q.rubricMatrix?.[1] || 'Does not meet standards'}\n`;
             text += `  [3 - Meets]: ${q.rubricMatrix?.[3] || 'Meets expectations'}\n`;
             text += `  [5 - Excellent]: ${q.rubricMatrix?.[5] || 'Exceptional mastery'}\n`;
@@ -481,8 +489,11 @@ Analyze in ${targetLangStr}. Return ONLY valid JSON:
         alert('Candidate evaluation session saved to dashboard analytics!');
       };
 
+      // Task 1 Fix: Connected AI generation API fetch with loading state and error messaging
       const generateInterviewQuestions = async () => {
         setIsGenerating(true);
+        setApiErrorMessage('');
+        setApiStatusMessage('');
         setCandidateScores({});
         setCandidateNotes({});
         setAiAnswerReviews({});
@@ -500,27 +511,32 @@ Analyze in ${targetLangStr}. Return ONLY valid JSON:
 
         if (apiKey) {
           try {
-            setApiStatusMessage('Connecting to Gemini 2.5 Flash...');
+            setApiStatusMessage('Connecting to AI API (Gemini 2.5 Flash)...');
             const prompt = `Generate a structured interview question kit strictly in ${targetLangStr} for a ${config.seniority} level ${targetPosition} in ${config.department}.
 Composition requirement: ${compositionText} (Total ${totalQuestionsCount} questions, max 10).
-Context: ${config.additionalContext}
+Additional Context: ${config.additionalContext || 'None'}
 
-CRITICAL: EVERY SINGLE QUESTION MUST BE DISTINCT AND ROLE-SPECIFIC. AVOID REPETITIVE TEMPLATES.
+CRITICAL INSTRUCTIONS:
+- EVERY QUESTION MUST BE DISTINCT, HIGHLY ROLE-SPECIFIC, AND NON-REPETITIVE.
+- Provide a clear 3-tier Recommended Rubric matrix for each question:
+  - "1": Specific description for Score 1 (Poor/Unsatisfactory)
+  - "3": Specific description for Score 3 (Meets Expectations/Baseline)
+  - "5": Specific description for Score 5 (Exceptional/Exceeds)
 
-Return ONLY valid JSON in ${targetLangStr} matching:
+Return ONLY a raw JSON object with zero markdown wrapper:
 {
   "questions": [
     {
       "id": "q1",
       "category": "Technical",
-      "question": "Unique question text in ${targetLangStr}",
-      "purpose": "Purpose in ${targetLangStr}",
-      "greenFlags": ["Indicator 1", "Indicator 2"],
-      "redFlags": ["Warning sign 1", "Warning sign 2"],
+      "question": "Unique role-tailored question in ${targetLangStr}",
+      "purpose": "Target competency evaluated in ${targetLangStr}",
+      "greenFlags": ["Strong positive indicator 1", "Strong positive indicator 2"],
+      "redFlags": ["Red flag warning 1", "Red flag warning 2"],
       "rubricMatrix": {
-        "1": "Description for Poor (1)",
-        "3": "Description for Meets Expectations (3)",
-        "5": "Description for Excellent (5)"
+        "1": "Description for Poor (Score 1)",
+        "3": "Description for Meets Expectations (Score 3)",
+        "5": "Description for Exceptional (Score 5)"
       }
     }
   ]
@@ -529,35 +545,47 @@ Return ONLY valid JSON in ${targetLangStr} matching:
             const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                  responseMimeType: "application/json"
+                }
+              })
             });
 
-            if (!res.ok) throw new Error(`HTTP ${res.status} from Gemini API`);
+            if (!res.ok) {
+              const errPayload = await res.json().catch(() => ({}));
+              const msg = errPayload.error?.message || `API HTTP Error ${res.status}`;
+              throw new Error(msg);
+            }
+
             const data = await res.json();
             const textResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (!textResponse) throw new Error("Received empty payload from Gemini API");
+            if (!textResponse) throw new Error("AI provider returned empty content.");
 
-            const cleanedJson = textResponse.replace(/```json/g, '').replace(/```/g, '').trim();
-            const parsed = JSON.parse(cleanedJson);
+            const parsed = JSON.parse(textResponse);
+            if (!parsed.questions || !Array.isArray(parsed.questions)) {
+              throw new Error("Invalid question kit format returned by AI.");
+            }
 
             setGeneratedKit({
               position: targetPosition,
               seniority: config.seniority,
               questions: parsed.questions.slice(0, 10)
             });
-            setApiStatusMessage('Generated via Live Gemini AI');
+            setApiStatusMessage('Successfully generated question set via Gemini AI API.');
             setActiveTab('studio');
             setIsGenerating(false);
             return;
           } catch (err) {
-            console.warn("AI Generation fallback triggered:", err);
-            setApiStatusMessage('API Error: Switched to offline unique question fallback');
+            console.error("AI Generation Failed:", err);
+            setApiErrorMessage(`AI Error: ${err.message}. Switched to offline generator.`);
           }
         } else {
-          setApiStatusMessage('No API Key: Using offline unique question bank');
+          setApiStatusMessage('No API Key set. Using built-in offline question generator.');
         }
 
-        // Offline Unique Question Generator
+        // Offline Fallback Generator
         setTimeout(() => {
           const generatedQuestions = [];
           const langBank = FALLBACK_BANK[outputLang] || FALLBACK_BANK.en;
@@ -594,7 +622,7 @@ Return ONLY valid JSON in ${targetLangStr} matching:
           });
           setActiveTab('studio');
           setIsGenerating(false);
-        }, 1000);
+        }, 800);
       };
 
       return (
@@ -717,6 +745,20 @@ Return ONLY valid JSON in ${targetLangStr} matching:
                     <p className="text-xs text-slate-500 mt-1">Output Language set to: <strong className="text-indigo-600 uppercase">{outputLang === 'id' ? 'Bahasa Indonesia' : 'English'}</strong></p>
                   </div>
 
+                  {/* User-visible status / error banner for AI API */}
+                  {apiErrorMessage && (
+                    <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-2xl text-xs font-semibold flex items-center justify-between">
+                      <span>⚠️ {apiErrorMessage}</span>
+                      <button onClick={() => setApiErrorMessage('')} className="text-rose-500 font-bold ml-2">✕</button>
+                    </div>
+                  )}
+
+                  {apiStatusMessage && !apiErrorMessage && (
+                    <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 p-3 rounded-2xl text-xs font-medium">
+                      ℹ️ {apiStatusMessage}
+                    </div>
+                  )}
+
                   <div className="space-y-6">
                     <div>
                       <label className="block text-xs font-bold text-slate-700 mb-2">Department</label>
@@ -782,8 +824,18 @@ Return ONLY valid JSON in ${targetLangStr} matching:
                       <textarea value={config.additionalContext} onChange={e => setConfig({ ...config, additionalContext: e.target.value })} placeholder="e.g. Focus on leadership under pressure, system design, high concurrency, and conflict resolution..." className="w-full p-3 border border-slate-300 rounded-xl bg-slate-50 h-24 text-sm" />
                     </div>
 
-                    <button onClick={generateInterviewQuestions} disabled={isGenerating || totalQuestionsCount === 0} className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-400 text-white font-bold rounded-xl shadow-lg transition">
-                      {isGenerating ? 'Generating Question Kit...' : 'Generate Questions & Rubrics →'}
+                    <button onClick={generateInterviewQuestions} disabled={isGenerating || totalQuestionsCount === 0} className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-400 text-white font-bold rounded-xl shadow-lg transition flex items-center justify-center space-x-2">
+                      {isGenerating ? (
+                        <React.Fragment>
+                          <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          <span>Generating Questions with AI...</span>
+                        </React.Fragment>
+                      ) : (
+                        <span>Generate Questions & Rubrics →</span>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -876,20 +928,33 @@ Return ONLY valid JSON in ${targetLangStr} matching:
                               </div>
                             </div>
 
+                            {/* Task 2 Fix: Recommended Rubric Section Matrix */}
                             <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2 text-xs">
-                              <span className="font-bold text-slate-700 block">Recommended Rubric Criteria:</span>
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                                  <span className="font-bold text-rose-600 block mb-1">Score 1 (Poor):</span>
-                                  <input type="text" value={q.rubricMatrix?.[1] || ''} onChange={e => handleUpdateQuestion(idx, 'rubricMatrix', { ...q.rubricMatrix, 1: e.target.value })} className="w-full text-xs p-1 border border-slate-200 rounded" />
+                              <span className="font-bold text-slate-800 block text-xs">Recommended Rubric Criteria:</span>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div className="bg-white p-3 rounded-xl border border-rose-200 space-y-1">
+                                  <span className="font-bold text-rose-700 block">Score 1 (Poor)</span>
+                                  <textarea 
+                                    value={q.rubricMatrix?.[1] || ''} 
+                                    onChange={e => handleUpdateQuestion(idx, 'rubricMatrix', { ...q.rubricMatrix, 1: e.target.value })} 
+                                    className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-slate-50 h-16" 
+                                  />
                                 </div>
-                                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                                  <span className="font-bold text-amber-600 block mb-1">Score 3 (Meets):</span>
-                                  <input type="text" value={q.rubricMatrix?.[3] || ''} onChange={e => handleUpdateQuestion(idx, 'rubricMatrix', { ...q.rubricMatrix, 3: e.target.value })} className="w-full text-xs p-1 border border-slate-200 rounded" />
+                                <div className="bg-white p-3 rounded-xl border border-amber-200 space-y-1">
+                                  <span className="font-bold text-amber-700 block">Score 3 (Meets Expectations)</span>
+                                  <textarea 
+                                    value={q.rubricMatrix?.[3] || ''} 
+                                    onChange={e => handleUpdateQuestion(idx, 'rubricMatrix', { ...q.rubricMatrix, 3: e.target.value })} 
+                                    className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-slate-50 h-16" 
+                                  />
                                 </div>
-                                <div className="bg-white p-2.5 rounded-lg border border-slate-200">
-                                  <span className="font-bold text-emerald-600 block mb-1">Score 5 (Excellent):</span>
-                                  <input type="text" value={q.rubricMatrix?.[5] || ''} onChange={e => handleUpdateQuestion(idx, 'rubricMatrix', { ...q.rubricMatrix, 5: e.target.value })} className="w-full text-xs p-1 border border-slate-200 rounded" />
+                                <div className="bg-white p-3 rounded-xl border border-emerald-200 space-y-1">
+                                  <span className="font-bold text-emerald-700 block">Score 5 (Exceptional)</span>
+                                  <textarea 
+                                    value={q.rubricMatrix?.[5] || ''} 
+                                    onChange={e => handleUpdateQuestion(idx, 'rubricMatrix', { ...q.rubricMatrix, 5: e.target.value })} 
+                                    className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-slate-50 h-16" 
+                                  />
                                 </div>
                               </div>
                             </div>
@@ -917,8 +982,13 @@ Return ONLY valid JSON in ${targetLangStr} matching:
                               {cheatsheetDetail !== 'only_questions' && (
                                 <React.Fragment>
                                   <p className="text-xs text-slate-600 italic">Purpose: {q.purpose}</p>
-                                  <div className="text-xs bg-slate-50 p-3 rounded-lg border border-slate-200 mt-2">
-                                    <strong>Rubrics:</strong> [1-Poor]: {q.rubricMatrix?.[1]} | [3-Meets]: {q.rubricMatrix?.[3]} | [5-Excellent]: {q.rubricMatrix?.[5]}
+                                  <div className="text-xs bg-slate-50 p-3 rounded-lg border border-slate-200 mt-2 space-y-1">
+                                    <strong className="block text-slate-700">Recommended Rubric Matrix:</strong>
+                                    <div className="grid grid-cols-3 gap-2">
+                                      <div><span className="text-rose-700 font-bold">[1 - Poor]:</span> {q.rubricMatrix?.[1] || 'Does not meet standards'}</div>
+                                      <div><span className="text-amber-700 font-bold">[3 - Meets]:</span> {q.rubricMatrix?.[3] || 'Meets baseline expectations'}</div>
+                                      <div><span className="text-emerald-700 font-bold">[5 - Excellent]:</span> {q.rubricMatrix?.[5] || 'Exceptional mastery'}</div>
+                                    </div>
                                   </div>
                                 </React.Fragment>
                               )}
@@ -940,7 +1010,7 @@ Return ONLY valid JSON in ${targetLangStr} matching:
                 </div>
               )}
 
-              {/* TAB 3: LIVE INTERVIEW (With Interview Session Details Panel) */}
+              {/* TAB 3: LIVE INTERVIEW */}
               {activeTab === 'live-interview' && (
                 <div className="space-y-6">
                   {/* Interview Session Details Card */}
@@ -1019,6 +1089,18 @@ Return ONLY valid JSON in ${targetLangStr} matching:
                           </div>
                           <h3 className="text-base font-bold text-slate-900">{q.question}</h3>
 
+                          {/* Task 2: Live Rubric Matrix Reference Drawer */}
+                          {q.rubricMatrix && (
+                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1">
+                              <span className="font-bold text-slate-700 block">Recommended Rubric Criteria Benchmarks:</span>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                <div className="p-2 bg-white rounded border border-rose-100"><strong className="text-rose-700 block">1 - Poor:</strong> {q.rubricMatrix[1]}</div>
+                                <div className="p-2 bg-white rounded border border-amber-100"><strong className="text-amber-700 block">3 - Meets:</strong> {q.rubricMatrix[3]}</div>
+                                <div className="p-2 bg-white rounded border border-emerald-100"><strong className="text-emerald-700 block">5 - Excellent:</strong> {q.rubricMatrix[5]}</div>
+                              </div>
+                            </div>
+                          )}
+
                           <div>
                             <label className="block text-xs font-bold text-slate-700 mb-2">Score Candidate Response (1 to 5):</label>
                             <div className="flex space-x-2">
@@ -1062,7 +1144,7 @@ Return ONLY valid JSON in ${targetLangStr} matching:
                 </div>
               )}
 
-              {/* CANDIDATE SCORECARD TAB (100-Point Scale) */}
+              {/* CANDIDATE SCORECARD TAB */}
               {activeTab === 'scorecard' && (
                 <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-8 print-card">
                   <div className="border-b border-slate-200 pb-6 flex flex-wrap justify-between items-start gap-4">
@@ -1073,7 +1155,6 @@ Return ONLY valid JSON in ${targetLangStr} matching:
                       </p>
                     </div>
                     <div className="text-right">
-                      {/* Converted to 100 Scale */}
                       <span className="text-4xl font-black text-indigo-600">{computeOverallStats.score100} / 100</span>
                       <p className="text-xs font-bold text-slate-400">Overall Rating (Scale of 100)</p>
                     </div>

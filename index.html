@@ -278,24 +278,25 @@
       if (provider === 'gemini') {
         const modelsToTry = [
   customModel?.trim(),
-  "gemini-2.5-flash",        // ✅ Current stable model
-  "gemini-2.5-flash-lite",   // ✅ Fast, budget-friendly
-  "gemini-3.8-flash"         // ✅ Latest Flash model
+  "gemini-3.5-flash-lite",   // ✅ Current stable model
+  "gemini-2.5-flash",        // ✅ Still works until Dec 1, 2026
+  "gemini-2.0-flash"         // ✅ Older fallback
 ].filter(Boolean);
         let lastError = null;
         for (const model of modelsToTry) {
           try {
             const res = await fetchWithTimeout(
-              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
-              {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  contents: [{ parts: [{ text: `${system}\n\n${prompt}` }] }],
-                  generationConfig: { responseMimeType: "application/json" }
-                })
-              }
-            );
+  `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+  {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: `${system}\n\n${prompt}` }] }],
+      generationConfig: { responseMimeType: "application/json" }
+    })
+  },
+  90000 // ✅ Add this line: 90-second timeout for Gemini
+);
             if (!res.ok) {
               const e = await res.json().catch(() => ({}));
               throw new Error(`Gemini ${model} error (${res.status}): ${e.error?.message || res.statusText}`);

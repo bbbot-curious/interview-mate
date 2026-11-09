@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>InterviewMate — AI Question Generator & Candidate Evaluation Platform</title>
-    <!-- Tailwind CSS & React CDN Libraries -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -22,8 +21,9 @@
         animation: pretzelWiggle 3s infinite ease-in-out;
         transform-origin: center;
       }
+      /* ✅ FIX: hide easter egg from printouts too */
       @media print {
-        header, nav, button, footer, .no-print { display: none !important; }
+        header, nav, button, footer, .no-print, .pretzel-anim { display: none !important; }
         body { background: white !important; color: black !important; }
         .print-card { border: 1px solid #cbd5e1 !important; box-shadow: none !important; break-inside: avoid; }
       }
@@ -33,7 +33,7 @@
     <div id="root" class="flex-1 flex flex-col"></div>
 
     <script type="text/babel">
-    const { useState, useEffect, useMemo } = React;
+    const { useState, useMemo } = React;
 
     const DEPARTMENT_POSITIONS = {
       'Information Technology': ['Software Engineer', 'Senior Full Stack Developer', 'Frontend Developer', 'Backend Architect', 'DevOps Engineer', 'Data Analyst', 'Systems Administrator', 'Product Manager'],
@@ -135,128 +135,161 @@
       }
     };
 
-    // Universal AI Provider API Fetch Helper
+    // ✅ FIX: unique ID generator (avoids same-millisecond collisions)
+    const uid = (prefix = 'q') =>
+      `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    // ✅ FIX: safe localStorage parsing (no more white-screen crash on corrupted data)
+    function safeParse(key, fallback) {
+      try {
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : fallback;
+      } catch (err) {
+        console.warn(`safeParse: failed to parse "${key}"`, err);
+        return fallback;
+      }
+    }
+
+    // ✅ FIX: fetch wrapper that aborts hanging requests so UI never locks up
+    function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      return fetch(url, { ...options, signal: controller.signal })
+        .finally(() => clearTimeout(timer));
+    }
+
+    // ✅ FIX: robust JSON extraction from LLM outputs (handles prose, fences, stray text)
+    function extractJSON(text) {
+      if (typeof text !== 'string' || !text.trim()) {
+        throw new Error('AI provider returned an empty response.');
+      }
+      let cleaned = text.trim();
+      cleaned = cleaned.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+      try {
+        return JSON.parse(cleaned);
+      } catch (_) {
+        const start = cleaned.indexOf('{');
+        const end = cleaned.lastIndexOf('}');
+        if (start === -1 || end <= start) {
+          throw new Error('No JSON object found in AI response.');
+        }
+        return JSON.parse(cleaned.slice(start, end + 1));
+      }
+    }
+
+    // ✅ FIX: multi-provider API client — explicit key detection, real Gemini model names,
+    //         proper errors for unsupported providers, timeouts on all requests.
     async function callAIProvider(prompt, apiKey, systemInstruction = "You are an expert HR interviewer.") {
-      const cleanKey = apiKey ? apiKey.trim() : "";
-      if (!cleanKey) {
-        throw new Error("No API key provided. Please click 'Set API Key' in the top right.");
+      const key = (apiKey || '').trim();
+      if (!key) {
+        throw new Error("No API key provided. Click 'Set API Key' in the top right.");
       }
 
-      let textResult = "";
+      const system = `${systemInstruction} Respond with exactly one valid JSON object — no markdown fences, no prose, no explanation.`;
+      let textResult = '';
 
-      // Provider 1: Groq Cloud (keys start with gsk_)
-      if (cleanKey.startsWith("gsk_")) {
-        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      if (key.startsWith('gsk_')) {
+        const res = await fetchWithTimeout("https://api.groq.com/openai/v1/chat/completions", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${cleanKey}`
-          },
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
           body: JSON.stringify({
             model: "llama-3.3-70b-versatile",
             messages: [
-              { role: "system", content: systemInstruction },
+              { role: "system", content: system },
               { role: "user", content: prompt }
             ],
             response_format: { type: "json_object" }
           })
         });
         if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(`Groq API Error (${res.status}): ${errData.error?.message || res.statusText}`);
+          const e = await res.json().catch(() => ({}));
+          throw new Error(`Groq API error (${res.status}): ${e.error?.message || res.statusText}`);
         }
         const data = await res.json();
         textResult = data.choices?.[0]?.message?.content;
       }
-      // Provider 2: OpenRouter (keys start with sk-or-)
-      else if (cleanKey.startsWith("sk-or-")) {
-        const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      else if (key.startsWith('sk-or-')) {
+        const res = await fetchWithTimeout("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${cleanKey}`
-          },
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
           body: JSON.stringify({
             model: "meta-llama/llama-3.3-70b-instruct:free",
             messages: [
-              { role: "system", content: systemInstruction },
+              { role: "system", content: system },
               { role: "user", content: prompt }
             ],
             response_format: { type: "json_object" }
           })
         });
         if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(`OpenRouter API Error (${res.status}): ${errData.error?.message || res.statusText}`);
+          const e = await res.json().catch(() => ({}));
+          throw new Error(`OpenRouter API error (${res.status}): ${e.error?.message || res.statusText}`);
         }
         const data = await res.json();
         textResult = data.choices?.[0]?.message?.content;
       }
-      // Provider 3: OpenAI (keys start with sk- and not sk-or-)
-      else if (cleanKey.startsWith("sk-")) {
-        const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      // ✅ FIX: explicitly reject Anthropic keys instead of silently sending to the wrong provider
+      else if (key.startsWith('sk-ant-')) {
+        throw new Error("Anthropic (Claude) keys are not supported. Please use Groq, OpenRouter, OpenAI, or Google Gemini.");
+      }
+      else if (key.startsWith('sk-')) {
+        const res = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${cleanKey}`
-          },
+          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
           body: JSON.stringify({
             model: "gpt-4o-mini",
             messages: [
-              { role: "system", content: systemInstruction },
+              { role: "system", content: system },
               { role: "user", content: prompt }
             ],
             response_format: { type: "json_object" }
           })
         });
         if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(`OpenAI API Error (${res.status}): ${errData.error?.message || res.statusText}`);
+          const e = await res.json().catch(() => ({}));
+          throw new Error(`OpenAI API error (${res.status}): ${e.error?.message || res.statusText}`);
         }
         const data = await res.json();
         textResult = data.choices?.[0]?.message?.content;
       }
-      // Provider 4: Google Gemini REST API (AIza... or default)
-      else {
-        // Updated model fallback list featuring gemini-3.8-flash
-        const modelsToTry = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash-lite"];
+      // ✅ FIX: real, currently-live Gemini model names
+      else if (key.startsWith('AIza')) {
+        const modelsToTry = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"];
         let lastError = null;
-
         for (const model of modelsToTry) {
           try {
-            const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${cleanKey}`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                contents: [{ parts: [{ text: `${systemInstruction}\n\n${prompt}` }] }],
-                generationConfig: { responseMimeType: "application/json" }
-              })
-            });
-
+            const res = await fetchWithTimeout(
+              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  contents: [{ parts: [{ text: `${system}\n\n${prompt}` }] }],
+                  generationConfig: { responseMimeType: "application/json" }
+                })
+              }
+            );
             if (!res.ok) {
-              const errData = await res.json().catch(() => ({}));
-              throw new Error(`Gemini API (${model}) Error (${res.status}): ${errData.error?.message || res.statusText}`);
+              const e = await res.json().catch(() => ({}));
+              throw new Error(`Gemini ${model} error (${res.status}): ${e.error?.message || res.statusText}`);
             }
-
             const data = await res.json();
             textResult = data.candidates?.[0]?.content?.parts?.[0]?.text;
             if (textResult) break;
-          } catch (e) {
-            lastError = e;
+          } catch (err) {
+            lastError = err;
           }
         }
-
         if (!textResult) {
-          throw lastError || new Error("Failed to receive response from Google Gemini API.");
+          throw lastError || new Error("Failed to receive a response from Google Gemini API.");
         }
       }
+      // ✅ FIX: unknown key format = explicit error (was silently routed to Gemini)
+      else {
+        throw new Error("Unrecognized API key format. Supported prefixes: gsk_ (Groq), sk-or- (OpenRouter), sk- (OpenAI), AIza (Google Gemini).");
+      }
 
-      if (!textResult) throw new Error("Empty payload returned by AI provider.");
-      
-      // Robust JSON sanitation logic
-      let cleaned = textResult.trim();
-      cleaned = cleaned.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim();
-      return JSON.parse(cleaned);
+      return extractJSON(textResult);
     }
 
     function App() {
@@ -264,35 +297,40 @@
       const [outputLang, setOutputLang] = useState('en');
       const [studioViewMode, setStudioViewMode] = useState('studio');
       const [cheatsheetDetail, setCheatsheetDetail] = useState('full');
-      const [apiKey, setApiKey] = useState(() => localStorage.getItem('interviewmate_gemini_key') || '');
+
+      // ✅ FIX: migrate legacy storage key + use safeParse
+      const [apiKey, setApiKey] = useState(() => {
+        const current = localStorage.getItem('interviewmate_api_key');
+        if (current !== null) return current;
+        const legacy = localStorage.getItem('interviewmate_gemini_key');
+        return legacy || '';
+      });
       const [showApiKeyModal, setShowApiKeyModal] = useState(false);
       const [scrutinyMode, setScrutinyMode] = useState('balanced');
       const [copyStatus, setCopyStatus] = useState('');
       const [apiStatusMessage, setApiStatusMessage] = useState('');
       const [apiErrorMessage, setApiErrorMessage] = useState('');
+      const [compositionWarning, setCompositionWarning] = useState('');
 
       // Pretzel Cat Easter Egg State
       const [showCatModal, setShowCatModal] = useState(false);
       const [catImageUrl, setCatImageUrl] = useState('');
       const [isLoadingCat, setIsLoadingCat] = useState(false);
 
-      // Session Details state (Interviewee, Interviewer, Date, Time)
       const [sessionDetails, setSessionDetails] = useState({
         candidateName: '',
         interviewerName: '',
         date: new Date().toISOString().split('T')[0],
         time: new Date().toTimeString().slice(0, 5)
       });
-      
-      const [presets, setPresets] = useState(() => {
-        const saved = localStorage.getItem('interviewmate_presets');
-        return saved ? JSON.parse(saved) : DEFAULT_PRESETS;
-      });
 
-      const [savedSessions, setSavedSessions] = useState(() => {
-        const saved = localStorage.getItem('interviewmate_sessions');
-        return saved ? JSON.parse(saved) : DEFAULT_SESSIONS;
-      });
+      // ✅ FIX: safeParse avoids crash on malformed storage
+      const [presets, setPresets] = useState(() =>
+        safeParse('interviewmate_presets', DEFAULT_PRESETS)
+      );
+      const [savedSessions, setSavedSessions] = useState(() =>
+        safeParse('interviewmate_sessions', DEFAULT_SESSIONS)
+      );
 
       const [editingPreset, setEditingPreset] = useState(null);
 
@@ -313,43 +351,58 @@
       });
 
       const [generatedKit, setGeneratedKit] = useState(null);
+
+      // ✅ FIX: all per-question state is keyed by question id (not array index),
+      //         so deleting or regenerating a question never misaligns scores/notes.
       const [candidateScores, setCandidateScores] = useState({});
       const [candidateNotes, setCandidateNotes] = useState({});
       const [aiAnswerReviews, setAiAnswerReviews] = useState({});
-      const [reviewingIndex, setReviewingIndex] = useState(null);
+
+      // ✅ FIX: per-question loading state so we can disable the button that's mid-request
+      const [reviewingId, setReviewingId] = useState(null);
+      const [swappingId, setSwappingId] = useState(null);
+
       const [isGenerating, setIsGenerating] = useState(false);
+
+      // ✅ FIX: track "saved" state to prevent accidental double-save of the same session
+      const [sessionSaved, setSessionSaved] = useState(false);
 
       const totalQuestionsCount = useMemo(() => {
         return Object.values(config.composition).reduce((a, b) => a + Number(b), 0);
       }, [config.composition]);
 
-      // Cat Easter Egg Fetch Handler
+      // ✅ FIX: working cat URLs — previous version had Markdown artifacts leaked into the fetch URL
       const handlePretzelClick = async () => {
         setShowCatModal(true);
         setIsLoadingCat(true);
         try {
-          const res = await fetch('[https://api.thecatapi.com/v1/images/search](https://api.thecatapi.com/v1/images/search)');
+          const res = await fetchWithTimeout('https://api.thecatapi.com/v1/images/search', {}, 8000);
           const data = await res.json();
           if (data && data[0] && data[0].url) {
             setCatImageUrl(data[0].url);
           } else {
-            setCatImageUrl(`[https://cataas.com/cat?t=$](https://cataas.com/cat?t=$){Date.now()}`);
+            setCatImageUrl(`https://cataas.com/cat?t=${Date.now()}`);
           }
         } catch (err) {
-          setCatImageUrl(`[https://cataas.com/cat?t=$](https://cataas.com/cat?t=$){Date.now()}`);
+          setCatImageUrl(`https://cataas.com/cat?t=${Date.now()}`);
         } finally {
           setIsLoadingCat(false);
         }
       };
 
-      // 100-Point Rating Calculation Engine
       const computeOverallStats = useMemo(() => {
         const scores = Object.values(candidateScores).filter(s => typeof s === 'number');
-        if (scores.length === 0) return { score100: 0, count: 0, recommendation: outputLang === 'id' ? 'Menunggu Penilaian' : 'Pending Ratings' };
+        if (scores.length === 0) {
+          return {
+            score100: 0,
+            count: 0,
+            recommendation: outputLang === 'id' ? 'Menunggu Penilaian' : 'Pending Ratings'
+          };
+        }
         const sum = scores.reduce((acc, curr) => acc + curr, 0);
         const avgScore5 = sum / scores.length;
         const score100 = Math.round((avgScore5 / 5) * 100);
-        
+
         let recommendation = outputLang === 'id' ? 'Tidak Direkomendasikan' : 'Not Recommended';
         if (score100 >= 90) recommendation = outputLang === 'id' ? 'Sangat Direkomendasikan' : 'Strongly Recommended';
         else if (score100 >= 72) recommendation = outputLang === 'id' ? 'Direkomendasikan' : 'Recommended';
@@ -358,15 +411,17 @@
         return { score100, count: scores.length, recommendation };
       }, [candidateScores, outputLang]);
 
-      // Dashboard Analytics
+      // ✅ FIX: `?? 0` instead of `|| (s.avgScore * 20)` — the legacy field doesn't exist
+      //         and a legitimate score of 0 was being replaced with NaN.
       const dashboardStats = useMemo(() => {
         const totalInterviewed = savedSessions.length;
         const totalQuestions = savedSessions.reduce((sum, s) => sum + (s.questionCount || 5), 0);
-        const avgScore100 = totalInterviewed > 0 
-          ? Math.round(savedSessions.reduce((sum, s) => sum + Number(s.score100 || (s.avgScore * 20)), 0) / totalInterviewed)
+        const avgScore100 = totalInterviewed > 0
+          ? Math.round(savedSessions.reduce((sum, s) => sum + Number(s.score100 ?? 0), 0) / totalInterviewed)
           : 0;
-        
+
         const positionsList = Array.from(new Set(savedSessions.map(s => s.position)));
+
         const competenciesSet = new Set();
         savedSessions.forEach(s => (s.competencies || ['Technical Depth', 'STAR Execution', 'Problem Solving']).forEach(c => competenciesSet.add(c)));
 
@@ -383,13 +438,21 @@
         };
       }, [savedSessions]);
 
+      // ✅ FIX: warn when the 10-question cap silently clamps the user's input
       const handleCompositionChange = (type, val) => {
         const parsedVal = Math.max(0, parseInt(val) || 0);
         const currentOthersTotal = Object.entries(config.composition)
           .filter(([k]) => k !== type)
           .reduce((sum, [_, count]) => sum + Number(count), 0);
-        
-        const allowedVal = Math.min(parsedVal, 10 - currentOthersTotal);
+
+        const allowedVal = Math.max(0, Math.min(parsedVal, 10 - currentOthersTotal));
+        setCompositionWarning('');
+        if (parsedVal > allowedVal) {
+          setCompositionWarning(
+            `Total questions capped at 10. "${type}" reduced to ${allowedVal}.`
+          );
+          setTimeout(() => setCompositionWarning(''), 3500);
+        }
         setConfig(prev => ({
           ...prev,
           composition: { ...prev.composition, [type]: allowedVal }
@@ -397,24 +460,49 @@
       };
 
       const handleSaveApiKey = (key) => {
-        setApiKey(key);
-        localStorage.setItem('interviewmate_gemini_key', key);
+        const trimmed = (key || '').trim();
+        setApiKey(trimmed);
+        try {
+          localStorage.setItem('interviewmate_api_key', trimmed);
+          localStorage.removeItem('interviewmate_gemini_key');
+        } catch (e) {
+          console.warn('Could not persist API key', e);
+        }
         setApiErrorMessage('');
       };
 
-      const handleScoreChange = (qIndex, score) => {
-        setCandidateScores(prev => ({ ...prev, [qIndex]: score }));
+      // ✅ FIX: dedicated clear so users aren't forced to overwrite a bad key
+      const handleClearApiKey = () => {
+        setApiKey('');
+        try {
+          localStorage.removeItem('interviewmate_api_key');
+          localStorage.removeItem('interviewmate_gemini_key');
+        } catch (e) { /* noop */ }
+        setApiStatusMessage('');
+        setApiErrorMessage('');
       };
 
-      const handleNoteChange = (qIndex, note) => {
-        setCandidateNotes(prev => ({ ...prev, [qIndex]: note }));
+      const handleScoreChange = (qId, score) => {
+        setCandidateScores(prev => ({ ...prev, [qId]: score }));
+        setSessionSaved(false);
       };
 
-      const handleUpdateQuestion = (qIndex, field, value) => {
-        if (!generatedKit) return;
-        const updatedQuestions = [...generatedKit.questions];
-        updatedQuestions[qIndex] = { ...updatedQuestions[qIndex], [field]: value };
-        setGeneratedKit({ ...generatedKit, questions: updatedQuestions });
+      const handleNoteChange = (qId, note) => {
+        setCandidateNotes(prev => ({ ...prev, [qId]: note }));
+        setSessionSaved(false);
+      };
+
+      // ✅ FIX: functional setState keyed by id (was index-keyed, caused stale-closure races)
+      const handleUpdateQuestion = (qId, field, value) => {
+        setGeneratedKit(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            questions: prev.questions.map(q =>
+              q.id === qId ? { ...q, [field]: value } : q
+            )
+          };
+        });
       };
 
       const handleAddCustomQuestion = () => {
@@ -424,7 +512,7 @@
           return;
         }
         const newQ = {
-          id: `q-custom-${Date.now()}`,
+          id: uid('q-custom'),
           category: 'Custom',
           question: outputLang === 'id' ? 'Pertanyaan kustom baru...' : 'New custom question...',
           purpose: outputLang === 'id' ? 'Menilai kriteria khusus.' : 'Evaluates specific custom role criteria.',
@@ -436,18 +524,28 @@
             5: outputLang === 'id' ? 'Luar biasa' : 'Exceptional'
           }
         };
-        setGeneratedKit({ ...generatedKit, questions: [...generatedKit.questions, newQ] });
+        setGeneratedKit(prev => ({ ...prev, questions: [...prev.questions, newQ] }));
       };
 
-      const handleDeleteQuestion = (qIndex) => {
-        if (!generatedKit) return;
-        const updatedQuestions = generatedKit.questions.filter((_, i) => i !== qIndex);
-        setGeneratedKit({ ...generatedKit, questions: updatedQuestions });
+      // ✅ FIX: clean up orphaned scores/notes when a question is deleted
+      const handleDeleteQuestion = (qId) => {
+        setGeneratedKit(prev => {
+          if (!prev) return prev;
+          return { ...prev, questions: prev.questions.filter(q => q.id !== qId) };
+        });
+        setCandidateScores(prev => { const n = { ...prev }; delete n[qId]; return n; });
+        setCandidateNotes(prev => { const n = { ...prev }; delete n[qId]; return n; });
+        setAiAnswerReviews(prev => { const n = { ...prev }; delete n[qId]; return n; });
+        setSessionSaved(false);
       };
 
-      const handleRegenerateSingleQuestion = async (qIndex) => {
-        if (!generatedKit) return;
-        const qToReplace = generatedKit.questions[qIndex];
+      // ✅ FIX: per-question loading state, functional updates, and normalised AI output
+      const handleRegenerateSingleQuestion = async (qId) => {
+        if (!generatedKit || swappingId === qId) return;
+        const qToReplace = generatedKit.questions.find(q => q.id === qId);
+        if (!qToReplace) return;
+
+        setSwappingId(qId);
         const targetLangStr = outputLang === 'id' ? 'Bahasa Indonesia' : 'English';
 
         const prompt = `Generate 1 alternative ${qToReplace.category} interview question in ${targetLangStr} for a ${generatedKit.seniority} level ${generatedKit.position}. Ensure it is completely distinct.
@@ -461,39 +559,83 @@ Return ONLY raw JSON matching:
   "rubricMatrix": {"1": "Poor description", "3": "Meets expectations description", "5": "Excellent description"}
 }`;
 
-        if (apiKey && apiKey.trim()) {
-          try {
-            const parsed = await callAIProvider(prompt, apiKey, "You are an expert HR interviewer. Output ONLY valid JSON.");
-            const updatedQuestions = [...generatedKit.questions];
-            updatedQuestions[qIndex] = { ...parsed, id: `q-regen-${Date.now()}` };
-            setGeneratedKit({ ...generatedKit, questions: updatedQuestions });
+        try {
+          if (apiKey && apiKey.trim()) {
+            const parsed = await callAIProvider(prompt, apiKey, "You are an expert HR interviewer.");
+            const normalised = {
+              id: uid('q-regen'),
+              category: parsed.category || qToReplace.category,
+              question: parsed.question || qToReplace.question,
+              purpose: parsed.purpose || qToReplace.purpose || '',
+              greenFlags: Array.isArray(parsed.greenFlags) ? parsed.greenFlags : qToReplace.greenFlags,
+              redFlags: Array.isArray(parsed.redFlags) ? parsed.redFlags : qToReplace.redFlags,
+              rubricMatrix: parsed.rubricMatrix || qToReplace.rubricMatrix
+            };
+            setGeneratedKit(prev => {
+              if (!prev) return prev;
+              const updated = prev.questions.map(q => q.id === qId ? normalised : q);
+              return { ...prev, questions: updated };
+            });
+            // Transfer any existing score/notes to the new id
+            setCandidateScores(prev => {
+              if (prev[qId] === undefined) return prev;
+              const n = { ...prev, [normalised.id]: prev[qId] };
+              delete n[qId];
+              return n;
+            });
+            setCandidateNotes(prev => {
+              if (prev[qId] === undefined) return prev;
+              const n = { ...prev, [normalised.id]: prev[qId] };
+              delete n[qId];
+              return n;
+            });
+            setAiAnswerReviews(prev => {
+              if (prev[qId] === undefined) return prev;
+              const n = { ...prev, [normalised.id]: prev[qId] };
+              delete n[qId];
+              return n;
+            });
             return;
-          } catch(err) {
-            console.warn("Single question AI swap failed:", err);
-            alert(`AI Swap Error: ${err.message}`);
           }
-        }
 
-        const updatedQuestions = [...generatedKit.questions];
-        updatedQuestions[qIndex] = {
-          ...qToReplace,
-          question: outputLang === 'id' 
+          // Offline fallback
+          const offlineText = outputLang === 'id'
             ? `[Alternatif] Bagaimana Anda mengelola prioritas utama dalam peran ${generatedKit.position}?`
-            : `[Alternative] How do you manage critical priorities in your role as ${generatedKit.position}?`,
-          id: `q-regen-${Date.now()}`
-        };
-        setGeneratedKit({ ...generatedKit, questions: updatedQuestions });
+            : `[Alternative] How do you manage critical priorities in your role as ${generatedKit.position}?`;
+          const newId = uid('q-regen');
+          setGeneratedKit(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              questions: prev.questions.map(q =>
+                q.id === qId ? { ...q, id: newId, question: offlineText } : q
+              )
+            };
+          });
+          setCandidateScores(prev => { const n = { ...prev }; delete n[qId]; return n; });
+          setCandidateNotes(prev => { const n = { ...prev }; delete n[qId]; return n; });
+          setAiAnswerReviews(prev => { const n = { ...prev }; delete n[qId]; return n; });
+        } catch (err) {
+          console.warn("Single question AI swap failed:", err);
+          setApiErrorMessage(`AI Swap Error: ${err.message}`);
+        } finally {
+          setSwappingId(null);
+        }
       };
 
-      const handleReviewAnswerWithAI = async (qIndex) => {
-        const note = candidateNotes[qIndex];
+      // ✅ FIX: per-question loading state, functional updates, structured normalisation
+      const handleReviewAnswerWithAI = async (qId) => {
+        if (!generatedKit || reviewingId === qId) return;
+        const note = candidateNotes[qId];
         if (!note || !note.trim()) {
           alert('Please record transcript notes for this response before triggering AI review.');
           return;
         }
-        setReviewingIndex(qIndex);
+        const questionObj = generatedKit.questions.find(q => q.id === qId);
+        if (!questionObj) return;
 
-        const questionObj = generatedKit.questions[qIndex];
+        setReviewingId(qId);
+
         const targetLangStr = outputLang === 'id' ? 'Bahasa Indonesia' : 'English';
 
         const prompt = `You are an executive interviewer evaluating under Scrutiny Level: ${scrutinyMode}.
@@ -509,32 +651,38 @@ Analyze in ${targetLangStr}. Return ONLY raw JSON:
   "suggestedFollowUp": "Follow-up question"
 }`;
 
-        if (apiKey && apiKey.trim()) {
-          try {
-            const parsed = await callAIProvider(prompt, apiKey, "You are an executive interviewer. Output ONLY valid JSON.");
-            setAiAnswerReviews(prev => ({ ...prev, [qIndex]: parsed }));
-            if (parsed.suggestedScore) handleScoreChange(qIndex, parsed.suggestedScore);
-            setReviewingIndex(null);
-            return;
-          } catch (err) {
-            console.warn("AI Answer Review failed:", err);
-            alert(`AI Answer Review Error: ${err.message}`);
-            setReviewingIndex(null);
+        const normalise = (parsed) => ({
+          suggestedScore: Math.min(5, Math.max(1, Number(parsed.suggestedScore) || 3)),
+          strengthsFound: Array.isArray(parsed.strengthsFound) ? parsed.strengthsFound : [],
+          gapsFound: Array.isArray(parsed.gapsFound) ? parsed.gapsFound : [],
+          suggestedFollowUp: typeof parsed.suggestedFollowUp === 'string' ? parsed.suggestedFollowUp : ''
+        });
+
+        try {
+          if (apiKey && apiKey.trim()) {
+            const parsed = await callAIProvider(prompt, apiKey, "You are an executive interviewer.");
+            const cleaned = normalise(parsed);
+            setAiAnswerReviews(prev => ({ ...prev, [qId]: cleaned }));
+            handleScoreChange(qId, cleaned.suggestedScore);
             return;
           }
-        }
 
-        setTimeout(() => {
-          const mockResult = {
+          // Offline mock
+          await new Promise(resolve => setTimeout(resolve, 800));
+          const mockResult = normalise({
             suggestedScore: Math.min(5, Math.max(2, Math.floor(note.length / 25))),
             strengthsFound: outputLang === 'id' ? ['Menyebutkan konteks terstruktur', 'Menjelaskan alur tindakan'] : ['Mentions structured context', 'Explains action methodology'],
             gapsFound: outputLang === 'id' ? ['Dapat menambahkan metrik hasil bisnis terukur'] : ['Could include more specific quantified business impact'],
             suggestedFollowUp: outputLang === 'id' ? 'Apa metrik utama yang Anda gunakan untuk mengukur keberhasilan tersebut?' : 'What key metric did you use to measure that success?'
-          };
-          setAiAnswerReviews(prev => ({ ...prev, [qIndex]: mockResult }));
-          handleScoreChange(qIndex, mockResult.suggestedScore);
-          setReviewingIndex(null);
-        }, 800);
+          });
+          setAiAnswerReviews(prev => ({ ...prev, [qId]: mockResult }));
+          handleScoreChange(qId, mockResult.suggestedScore);
+        } catch (err) {
+          console.warn("AI Answer Review failed:", err);
+          setApiErrorMessage(`AI Answer Review Error: ${err.message}`);
+        } finally {
+          setReviewingId(null);
+        }
       };
 
       const handleCopyCheatsheet = () => {
@@ -543,7 +691,7 @@ Analyze in ${targetLangStr}. Return ONLY raw JSON:
 
         generatedKit.questions.forEach((q, idx) => {
           text += `Q${idx + 1} [${q.category}]: ${q.question}\n`;
-          
+
           if (cheatsheetDetail !== 'only_questions') {
             text += `Purpose: ${q.purpose}\n`;
             text += `Recommended Rubric Matrix:\n`;
@@ -559,25 +707,42 @@ Analyze in ${targetLangStr}. Return ONLY raw JSON:
           text += `--------------------------------------------------\n\n`;
         });
 
+        const markCopied = () => {
+          setCopyStatus(outputLang === 'id' ? 'Tersalin!' : 'Copied!');
+          setTimeout(() => setCopyStatus(''), 3000);
+        };
+
         if (navigator.clipboard && window.isSecureContext) {
-          navigator.clipboard.writeText(text).then(() => {
-            setCopyStatus(outputLang === 'id' ? 'Tersalin!' : 'Copied!');
-            setTimeout(() => setCopyStatus(''), 3000);
+          navigator.clipboard.writeText(text).then(markCopied).catch(() => {
+            // ✅ FIX: fall through to legacy path if clipboard write fails
+            const textArea = document.createElement('textarea');
+            textArea.value = text;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try { document.execCommand('copy'); } catch (_) { /* noop */ }
+            document.body.removeChild(textArea);
+            markCopied();
           });
         } else {
-          const textArea = document.createElement("textarea");
+          const textArea = document.createElement('textarea');
           textArea.value = text;
           document.body.appendChild(textArea);
           textArea.select();
-          document.execCommand('copy');
+          try { document.execCommand('copy'); } catch (_) { /* noop */ }
           document.body.removeChild(textArea);
-          setCopyStatus(outputLang === 'id' ? 'Tersalin!' : 'Copied!');
-          setTimeout(() => setCopyStatus(''), 3000);
+          markCopied();
         }
       };
 
+      // ✅ FIX: block saving empty sessions; mark the button as saved to prevent duplicates
       const handleSaveSessionToDashboard = () => {
         if (!generatedKit) return;
+        if (computeOverallStats.count === 0) {
+          alert('Please score at least one question before saving this session.');
+          return;
+        }
+        if (sessionSaved) return;
+
         const newSession = {
           id: `sess-${Date.now()}`,
           candidateName: sessionDetails.candidateName || 'Unnamed Candidate',
@@ -592,24 +757,32 @@ Analyze in ${targetLangStr}. Return ONLY raw JSON:
         };
         const updated = [newSession, ...savedSessions];
         setSavedSessions(updated);
-        localStorage.setItem('interviewmate_sessions', JSON.stringify(updated));
+        try {
+          localStorage.setItem('interviewmate_sessions', JSON.stringify(updated));
+        } catch (e) {
+          console.warn('Could not persist sessions', e);
+        }
+        setSessionSaved(true);
         alert('Candidate evaluation session saved to dashboard analytics!');
       };
 
+      // ✅ FIX: try/finally so `isGenerating` can never get stuck; offline path keeps spinner alive
       const generateInterviewQuestions = async () => {
         setIsGenerating(true);
         setApiErrorMessage('');
         setApiStatusMessage('');
+        setCompositionWarning('');
         setCandidateScores({});
         setCandidateNotes({});
         setAiAnswerReviews({});
+        setSessionSaved(false);
 
-        const targetPosition = (config.department === 'Other / Custom' || config.position === 'Custom Position') 
-          ? (config.customPosition || 'Custom Position') 
+        const targetPosition = (config.department === 'Other / Custom' || config.position === 'Custom Position')
+          ? (config.customPosition || 'Custom Position')
           : config.position;
-          
+
         const targetLangStr = outputLang === 'id' ? 'Bahasa Indonesia' : 'English';
-        
+
         const compositionText = Object.entries(config.composition)
           .filter(([_, count]) => count > 0)
           .map(([type, count]) => `${count} ${type} Questions`)
@@ -621,6 +794,7 @@ Additional Context: ${config.additionalContext || 'None'}
 
 CRITICAL INSTRUCTIONS:
 - EVERY QUESTION MUST BE DISTINCT, HIGHLY ROLE-SPECIFIC, AND NON-REPETITIVE.
+- Keep JSON field names in English even when the content is in ${targetLangStr}.
 - Provide a clear 3-tier Recommended Rubric matrix for each question:
   - "1": Specific description for Score 1 (Poor/Unsatisfactory)
   - "3": Specific description for Score 3 (Meets Expectations/Baseline)
@@ -648,66 +822,71 @@ Return ONLY a raw JSON object with zero markdown wrapper:
         if (apiKey && apiKey.trim()) {
           try {
             setApiStatusMessage('Connecting to AI API provider...');
-            const parsed = await callAIProvider(prompt, apiKey, "You are an expert HR interviewer. Output ONLY valid JSON.");
-            
-            if (!parsed.questions || !Array.isArray(parsed.questions)) {
-              throw new Error("Invalid structure: 'questions' array missing from AI response.");
+            const parsed = await callAIProvider(prompt, apiKey, "You are an expert HR interviewer.");
+            if (!parsed.questions || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
+              throw new Error("Invalid structure: 'questions' array missing or empty in AI response.");
             }
-
-            setGeneratedKit({
-              position: targetPosition,
-              seniority: config.seniority,
-              questions: parsed.questions.slice(0, 10)
-            });
+            // Ensure every question gets a stable unique id
+            const questions = parsed.questions.slice(0, 10).map((q, i) => ({
+              ...q,
+              id: q.id || uid(`q-${i + 1}`),
+              greenFlags: Array.isArray(q.greenFlags) ? q.greenFlags : [],
+              redFlags: Array.isArray(q.redFlags) ? q.redFlags : [],
+              rubricMatrix: q.rubricMatrix || {}
+            }));
+            setGeneratedKit({ position: targetPosition, seniority: config.seniority, questions });
             setApiStatusMessage('Successfully generated question set via AI!');
             setActiveTab('studio');
-            setIsGenerating(false);
-            return;
           } catch (err) {
             console.error("AI Generation Failed:", err);
             setApiErrorMessage(`AI Error: ${err.message}`);
+          } finally {
             setIsGenerating(false);
-            return;
           }
+          return;
         }
 
+        // Offline fallback — keep spinner visible during the simulated work
         setApiStatusMessage('No API Key set. Using built-in offline question generator.');
         setTimeout(() => {
-          const generatedQuestions = [];
-          const langBank = FALLBACK_BANK[outputLang] || FALLBACK_BANK.en;
+          try {
+            const generatedQuestions = [];
+            const langBank = FALLBACK_BANK[outputLang] || FALLBACK_BANK.en;
 
-          Object.entries(config.composition).forEach(([type, count]) => {
-            const availableList = langBank[type] || langBank.General;
-            for (let i = 0; i < count; i++) {
-              if (generatedQuestions.length >= 10) break;
-              const qText = availableList[i % availableList.length];
-              generatedQuestions.push({
-                id: `q-${type}-${i+1}-${Date.now()}`,
-                category: type,
-                question: `${qText} (Role: ${config.seniority} ${targetPosition})`,
-                purpose: outputLang === 'id' ? `Menilai kompetensi ${type} spesifik untuk ${targetPosition}.` : `Evaluates specific ${type} competencies for ${targetPosition}.`,
-                greenFlags: outputLang === 'id' 
-                  ? ['Menggunakan metode STAR dengan detail konkret', 'Menjelaskan dampak bisnis dan metrik hasil'] 
-                  : ['Uses STAR method with specific concrete details', 'Explains business impact and metric outcomes'],
-                redFlags: outputLang === 'id' 
-                  ? ['Jawaban umum tanpa contoh konkret', 'Menghindari tanggung jawab pribadi'] 
-                  : ['Generic response with no concrete examples', 'Avoids taking personal accountability'],
-                rubricMatrix: {
-                  1: outputLang === 'id' ? 'Jawaban kabur tanpa bukti penjelasan terstruktur.' : 'Vague answer with no structured evidence.',
-                  3: outputLang === 'id' ? 'Memenuhi standar dasar dengan metodologi jelas.' : 'Meets baseline standards with clear methodology.',
-                  5: outputLang === 'id' ? 'Luar biasa dengan penjelasan dampak bisnis terukur.' : 'Exceptional answer with clear ROI and impact.'
-                }
-              });
-            }
-          });
+            Object.entries(config.composition).forEach(([type, count]) => {
+              const availableList = langBank[type] || langBank.General;
+              for (let i = 0; i < count; i++) {
+                if (generatedQuestions.length >= 10) break;
+                const qText = availableList[i % availableList.length];
+                generatedQuestions.push({
+                  id: uid(`q-${type}-${i + 1}`),
+                  category: type,
+                  question: `${qText} (Role: ${config.seniority} ${targetPosition})`,
+                  purpose: outputLang === 'id'
+                    ? `Menilai kompetensi ${type} spesifik untuk ${targetPosition}.`
+                    : `Evaluates specific ${type} competencies for ${targetPosition}.`,
+                  greenFlags: outputLang === 'id'
+                    ? ['Menggunakan metode STAR dengan detail konkret', 'Menjelaskan dampak bisnis dan metrik hasil']
+                    : ['Uses STAR method with specific concrete details', 'Explains business impact and metric outcomes'],
+                  redFlags: outputLang === 'id'
+                    ? ['Jawaban umum tanpa contoh konkret', 'Menghindari tanggung jawab pribadi']
+                    : ['Generic response with no concrete examples', 'Avoids taking personal accountability'],
+                  rubricMatrix: {
+                    1: outputLang === 'id' ? 'Jawaban kabur tanpa bukti penjelasan terstruktur.' : 'Vague answer with no structured evidence.',
+                    3: outputLang === 'id' ? 'Memenuhi standar dasar dengan metodologi jelas.' : 'Meets baseline standards with clear methodology.',
+                    5: outputLang === 'id' ? 'Luar biasa dengan penjelasan dampak bisnis terukur.' : 'Exceptional answer with clear ROI and impact.'
+                  }
+                });
+              }
+            });
 
-          setGeneratedKit({
-            position: targetPosition,
-            seniority: config.seniority,
-            questions: generatedQuestions
-          });
-          setActiveTab('studio');
-          setIsGenerating(false);
+            setGeneratedKit({ position: targetPosition, seniority: config.seniority, questions: generatedQuestions });
+            setActiveTab('studio');
+          } catch (e) {
+            setApiErrorMessage(`Offline generation error: ${e.message}`);
+          } finally {
+            setIsGenerating(false);
+          }
         }, 800);
       };
 
@@ -725,7 +904,6 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                   </div>
                 </div>
 
-                {/* Navigation Links */}
                 <nav className="flex items-center space-x-1.5 text-xs font-semibold overflow-x-auto py-1">
                   <button onClick={() => setActiveTab('dashboard')} className={`px-3 py-2 rounded-xl transition ${activeTab === 'dashboard' ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:bg-slate-800'}`}>Dashboard</button>
                   <button onClick={() => setActiveTab('generator')} className={`px-3 py-2 rounded-xl transition ${activeTab === 'generator' ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:bg-slate-800'}`}>1. Generator</button>
@@ -735,7 +913,6 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                   <button onClick={() => setActiveTab('about')} className={`px-3 py-2 rounded-xl transition ${activeTab === 'about' ? 'bg-indigo-600 text-white shadow' : 'text-slate-300 hover:bg-slate-800'}`}>About & Guide</button>
                 </nav>
 
-                {/* Controls: AI Output Language Toggle & API Key */}
                 <div className="flex items-center space-x-2">
                   <div className="flex items-center bg-slate-800 p-1 border border-slate-700 rounded-xl text-xs font-bold">
                     <span className="px-2 text-slate-400">AI Output:</span>
@@ -750,13 +927,10 @@ Return ONLY a raw JSON object with zero markdown wrapper:
               </div>
             </header>
 
-            {/* Main Workspace */}
             <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8">
 
-              {/* DASHBOARD TAB */}
               {activeTab === 'dashboard' && (
                 <div className="space-y-8">
-                  {/* Hero Banner */}
                   <div className="bg-gradient-to-r from-indigo-900 via-slate-900 to-slate-900 text-white p-8 rounded-3xl shadow-xl border border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                     <div className="space-y-3 max-w-2xl">
                       <span className="text-xs font-bold px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-full border border-indigo-500/30">AI-Powered Hiring Studio</span>
@@ -768,7 +942,6 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                     </button>
                   </div>
 
-                  {/* 100-Point Metrics Bar */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-1">
                       <span className="text-xs font-bold text-slate-400 uppercase">Candidates Interviewed</span>
@@ -792,7 +965,6 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                     </div>
                   </div>
 
-                  {/* Sessions History Table */}
                   <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
                     <h3 className="font-bold text-slate-900 text-base">Recent Candidate Session Log</h3>
                     <div className="overflow-x-auto">
@@ -813,7 +985,8 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                               <td className="p-3 text-indigo-600 font-semibold">{s.position}</td>
                               <td className="p-3 text-slate-600">{s.interviewerName}</td>
                               <td className="p-3 text-slate-500">{s.date} @ {s.time}</td>
-                              <td className="p-3 font-black text-emerald-600">{s.score100 || Math.round(s.avgScore * 20)} / 100</td>
+                              {/* ✅ FIX: no more NaN from dead avgScore fallback */}
+                              <td className="p-3 font-black text-emerald-600">{Number(s.score100 ?? 0)} / 100</td>
                             </tr>
                           ))}
                         </tbody>
@@ -823,7 +996,6 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                 </div>
               )}
 
-              {/* GENERATOR TAB */}
               {activeTab === 'generator' && (
                 <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm max-w-3xl mx-auto space-y-6">
                   <div>
@@ -831,7 +1003,6 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                     <p className="text-xs text-slate-500 mt-1">Output Language set to: <strong className="text-indigo-600 uppercase">{outputLang === 'id' ? 'Bahasa Indonesia' : 'English'}</strong></p>
                   </div>
 
-                  {/* User-visible error & status alerts */}
                   {apiErrorMessage && (
                     <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-2xl text-xs font-semibold flex items-center justify-between">
                       <span>⚠️ {apiErrorMessage}</span>
@@ -842,6 +1013,13 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                   {apiStatusMessage && !apiErrorMessage && (
                     <div className="bg-indigo-50 border border-indigo-200 text-indigo-800 p-3 rounded-2xl text-xs font-medium">
                       ℹ️ {apiStatusMessage}
+                    </div>
+                  )}
+
+                  {/* ✅ FIX: visible feedback when the 10-question cap silently clamps input */}
+                  {compositionWarning && (
+                    <div className="bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-2xl text-xs font-medium">
+                      ⚠️ {compositionWarning}
                     </div>
                   )}
 
@@ -863,11 +1041,11 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                     {(config.department === 'Other / Custom' || config.position === 'Custom Position') && (
                       <div className="bg-indigo-50/60 p-4 rounded-2xl border border-indigo-100 space-y-2">
                         <label className="block text-xs font-bold text-indigo-900">Specify Custom Job Title</label>
-                        <input 
-                          type="text" 
-                          value={config.customPosition} 
-                          onChange={e => setConfig({ ...config, customPosition: e.target.value })} 
-                          placeholder="e.g. Lead AI Engineer, Chief Staff Officer, Risk Analyst..." 
+                        <input
+                          type="text"
+                          value={config.customPosition}
+                          onChange={e => setConfig({ ...config, customPosition: e.target.value })}
+                          placeholder="e.g. Lead AI Engineer, Chief Staff Officer, Risk Analyst..."
                           className="w-full p-3 border border-indigo-200 rounded-xl bg-white text-sm font-semibold text-slate-900"
                         />
                       </div>
@@ -892,11 +1070,11 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                         {Object.keys(config.composition).map(type => (
                           <div key={type} className="bg-white p-3 rounded-xl border border-slate-200">
                             <label className="block text-xs font-bold text-slate-600 mb-1">{type}</label>
-                            <input 
-                              type="number" 
-                              min="0" 
-                              max="10" 
-                              value={config.composition[type]} 
+                            <input
+                              type="number"
+                              min="0"
+                              max="10"
+                              value={config.composition[type]}
                               onChange={e => handleCompositionChange(type, e.target.value)}
                               className="w-full p-2 text-sm font-bold border border-slate-300 rounded-lg text-center bg-slate-50"
                             />
@@ -913,7 +1091,7 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                     <button onClick={generateInterviewQuestions} disabled={isGenerating || totalQuestionsCount === 0} className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-400 text-white font-bold rounded-xl shadow-lg transition flex items-center justify-center space-x-2">
                       {isGenerating ? (
                         <React.Fragment>
-                          <svg className="animate-spin h-5 w-5 text-white" xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" fill="none" viewBox="0 0 24 24">
+                          <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                           </svg>
@@ -927,7 +1105,6 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                 </div>
               )}
 
-              {/* QUESTION STUDIO & CHEATSHEET TAB */}
               {activeTab === 'studio' && (
                 <div className="space-y-6">
                   <div className="bg-white p-6 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-4 no-print">
@@ -968,84 +1145,91 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                   {generatedKit ? (
                     studioViewMode === 'studio' ? (
                       <div className="space-y-6">
-                        {generatedKit.questions.map((q, idx) => (
-                          <div key={q.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                            <div className="flex justify-between items-center gap-2">
-                              <input 
-                                type="text" 
-                                value={q.category} 
-                                onChange={e => handleUpdateQuestion(idx, 'category', e.target.value)}
-                                className="text-xs font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-md border border-indigo-100" 
+                        {generatedKit.questions.map((q, idx) => {
+                          const isSwapping = swappingId === q.id;
+                          return (
+                            <div key={q.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                              <div className="flex justify-between items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={q.category}
+                                  onChange={e => handleUpdateQuestion(q.id, 'category', e.target.value)}
+                                  className="text-xs font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-md border border-indigo-100"
+                                />
+                                <div className="flex items-center space-x-2">
+                                  {/* ✅ FIX: button disabled while its own swap request is in flight */}
+                                  <button
+                                    onClick={() => handleRegenerateSingleQuestion(q.id)}
+                                    disabled={isSwapping}
+                                    className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2.5 py-1 rounded-md disabled:opacity-50 disabled:cursor-wait"
+                                  >
+                                    {isSwapping ? '🔄 Swapping...' : '🔄 AI Swap Question'}
+                                  </button>
+                                  <button onClick={() => handleDeleteQuestion(q.id)} className="text-xs font-bold text-rose-600 hover:text-rose-800 bg-rose-50 px-2.5 py-1 rounded-md">
+                                    🗑️ Delete
+                                  </button>
+                                </div>
+                              </div>
+
+                              <textarea
+                                value={q.question}
+                                onChange={e => handleUpdateQuestion(q.id, 'question', e.target.value)}
+                                className="w-full text-base font-bold text-slate-900 border border-slate-200 rounded-xl p-3 bg-slate-50 focus:bg-white transition"
                               />
-                              <div className="flex items-center space-x-2">
-                                <button onClick={() => handleRegenerateSingleQuestion(idx)} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2.5 py-1 rounded-md">
-                                  🔄 AI Swap Question
-                                </button>
-                                <button onClick={() => handleDeleteQuestion(idx)} className="text-xs font-bold text-rose-600 hover:text-rose-800 bg-rose-50 px-2.5 py-1 rounded-md">
-                                  🗑️ Delete
-                                </button>
-                              </div>
-                            </div>
 
-                            <textarea 
-                              value={q.question} 
-                              onChange={e => handleUpdateQuestion(idx, 'question', e.target.value)} 
-                              className="w-full text-base font-bold text-slate-900 border border-slate-200 rounded-xl p-3 bg-slate-50 focus:bg-white transition"
-                            />
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs">
-                              <div>
-                                <span className="font-bold text-emerald-700 block mb-1">✓ Green Flags (Strong Answer)</span>
-                                <textarea 
-                                  value={q.greenFlags?.join('\n') || ''} 
-                                  onChange={e => handleUpdateQuestion(idx, 'greenFlags', e.target.value.split('\n'))}
-                                  placeholder="One flag per line..."
-                                  className="w-full p-2 border border-slate-200 rounded-lg bg-white h-20"
-                                />
-                              </div>
-                              <div>
-                                <span className="font-bold text-rose-700 block mb-1">⚠ Red Flags (Warning Signs)</span>
-                                <textarea 
-                                  value={q.redFlags?.join('\n') || ''} 
-                                  onChange={e => handleUpdateQuestion(idx, 'redFlags', e.target.value.split('\n'))}
-                                  placeholder="One flag per line..."
-                                  className="w-full p-2 border border-slate-200 rounded-lg bg-white h-20"
-                                />
-                              </div>
-                            </div>
-
-                            {/* Recommended Rubric Section Matrix */}
-                            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2 text-xs">
-                              <span className="font-bold text-slate-800 block text-xs">Recommended Rubric Criteria:</span>
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                <div className="bg-white p-3 rounded-xl border border-rose-200 space-y-1">
-                                  <span className="font-bold text-rose-700 block">Score 1 (Poor)</span>
-                                  <textarea 
-                                    value={q.rubricMatrix?.[1] || ''} 
-                                    onChange={e => handleUpdateQuestion(idx, 'rubricMatrix', { ...q.rubricMatrix, 1: e.target.value })} 
-                                    className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-slate-50 h-16" 
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-100 text-xs">
+                                <div>
+                                  <span className="font-bold text-emerald-700 block mb-1">✓ Green Flags (Strong Answer)</span>
+                                  <textarea
+                                    value={q.greenFlags?.join('\n') || ''}
+                                    onChange={e => handleUpdateQuestion(q.id, 'greenFlags', e.target.value.split('\n'))}
+                                    placeholder="One flag per line..."
+                                    className="w-full p-2 border border-slate-200 rounded-lg bg-white h-20"
                                   />
                                 </div>
-                                <div className="bg-white p-3 rounded-xl border border-amber-200 space-y-1">
-                                  <span className="font-bold text-amber-700 block">Score 3 (Meets Expectations)</span>
-                                  <textarea 
-                                    value={q.rubricMatrix?.[3] || ''} 
-                                    onChange={e => handleUpdateQuestion(idx, 'rubricMatrix', { ...q.rubricMatrix, 3: e.target.value })} 
-                                    className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-slate-50 h-16" 
-                                  />
-                                </div>
-                                <div className="bg-white p-3 rounded-xl border border-emerald-200 space-y-1">
-                                  <span className="font-bold text-emerald-700 block">Score 5 (Exceptional)</span>
-                                  <textarea 
-                                    value={q.rubricMatrix?.[5] || ''} 
-                                    onChange={e => handleUpdateQuestion(idx, 'rubricMatrix', { ...q.rubricMatrix, 5: e.target.value })} 
-                                    className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-slate-50 h-16" 
+                                <div>
+                                  <span className="font-bold text-rose-700 block mb-1">⚠ Red Flags (Warning Signs)</span>
+                                  <textarea
+                                    value={q.redFlags?.join('\n') || ''}
+                                    onChange={e => handleUpdateQuestion(q.id, 'redFlags', e.target.value.split('\n'))}
+                                    placeholder="One flag per line..."
+                                    className="w-full p-2 border border-slate-200 rounded-lg bg-white h-20"
                                   />
                                 </div>
                               </div>
+
+                              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2 text-xs">
+                                <span className="font-bold text-slate-800 block text-xs">Recommended Rubric Criteria:</span>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                  <div className="bg-white p-3 rounded-xl border border-rose-200 space-y-1">
+                                    <span className="font-bold text-rose-700 block">Score 1 (Poor)</span>
+                                    <textarea
+                                      value={q.rubricMatrix?.[1] || ''}
+                                      onChange={e => handleUpdateQuestion(q.id, 'rubricMatrix', { ...q.rubricMatrix, 1: e.target.value })}
+                                      className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-slate-50 h-16"
+                                    />
+                                  </div>
+                                  <div className="bg-white p-3 rounded-xl border border-amber-200 space-y-1">
+                                    <span className="font-bold text-amber-700 block">Score 3 (Meets Expectations)</span>
+                                    <textarea
+                                      value={q.rubricMatrix?.[3] || ''}
+                                      onChange={e => handleUpdateQuestion(q.id, 'rubricMatrix', { ...q.rubricMatrix, 3: e.target.value })}
+                                      className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-slate-50 h-16"
+                                    />
+                                  </div>
+                                  <div className="bg-white p-3 rounded-xl border border-emerald-200 space-y-1">
+                                    <span className="font-bold text-emerald-700 block">Score 5 (Exceptional)</span>
+                                    <textarea
+                                      value={q.rubricMatrix?.[5] || ''}
+                                      onChange={e => handleUpdateQuestion(q.id, 'rubricMatrix', { ...q.rubricMatrix, 5: e.target.value })}
+                                      className="w-full text-xs p-2 border border-slate-200 rounded-lg bg-slate-50 h-16"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                         <div className="flex justify-end no-print">
                           <button onClick={() => setActiveTab('live-interview')} className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-lg transition">Start Live Interview →</button>
                         </div>
@@ -1096,10 +1280,8 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                 </div>
               )}
 
-              {/* TAB 3: LIVE INTERVIEW */}
               {activeTab === 'live-interview' && (
                 <div className="space-y-6">
-                  {/* Interview Session Details Card */}
                   <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white p-6 rounded-3xl shadow-lg border border-slate-800 space-y-4">
                     <div className="flex justify-between items-center">
                       <h2 className="text-lg font-extrabold flex items-center space-x-2">
@@ -1111,46 +1293,45 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
                       <div>
                         <label className="block text-slate-400 font-bold mb-1">Interviewee (Candidate Name)</label>
-                        <input 
-                          type="text" 
-                          value={sessionDetails.candidateName} 
-                          onChange={e => setSessionDetails({ ...sessionDetails, candidateName: e.target.value })} 
-                          placeholder="e.g. Jordan Vance" 
-                          className="w-full p-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white font-semibold focus:border-indigo-500 focus:outline-none" 
+                        <input
+                          type="text"
+                          value={sessionDetails.candidateName}
+                          onChange={e => setSessionDetails({ ...sessionDetails, candidateName: e.target.value })}
+                          placeholder="e.g. Jordan Vance"
+                          className="w-full p-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white font-semibold focus:border-indigo-500 focus:outline-none"
                         />
                       </div>
                       <div>
                         <label className="block text-slate-400 font-bold mb-1">Interviewer Name</label>
-                        <input 
-                          type="text" 
-                          value={sessionDetails.interviewerName} 
-                          onChange={e => setSessionDetails({ ...sessionDetails, interviewerName: e.target.value })} 
-                          placeholder="e.g. Sarah Jenkins" 
-                          className="w-full p-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white font-semibold focus:border-indigo-500 focus:outline-none" 
+                        <input
+                          type="text"
+                          value={sessionDetails.interviewerName}
+                          onChange={e => setSessionDetails({ ...sessionDetails, interviewerName: e.target.value })}
+                          placeholder="e.g. Sarah Jenkins"
+                          className="w-full p-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white font-semibold focus:border-indigo-500 focus:outline-none"
                         />
                       </div>
                       <div>
                         <label className="block text-slate-400 font-bold mb-1">Date</label>
-                        <input 
-                          type="date" 
-                          value={sessionDetails.date} 
-                          onChange={e => setSessionDetails({ ...sessionDetails, date: e.target.value })} 
-                          className="w-full p-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white font-semibold focus:border-indigo-500 focus:outline-none" 
+                        <input
+                          type="date"
+                          value={sessionDetails.date}
+                          onChange={e => setSessionDetails({ ...sessionDetails, date: e.target.value })}
+                          className="w-full p-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white font-semibold focus:border-indigo-500 focus:outline-none"
                         />
                       </div>
                       <div>
                         <label className="block text-slate-400 font-bold mb-1">Time</label>
-                        <input 
-                          type="time" 
-                          value={sessionDetails.time} 
-                          onChange={e => setSessionDetails({ ...sessionDetails, time: e.target.value })} 
-                          className="w-full p-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white font-semibold focus:border-indigo-500 focus:outline-none" 
+                        <input
+                          type="time"
+                          value={sessionDetails.time}
+                          onChange={e => setSessionDetails({ ...sessionDetails, time: e.target.value })}
+                          className="w-full p-2.5 rounded-xl bg-slate-800 border border-slate-700 text-white font-semibold focus:border-indigo-500 focus:outline-none"
                         />
                       </div>
                     </div>
                   </div>
 
-                  {/* Scrutiny Controls Bar */}
                   <div className="bg-white p-5 rounded-2xl border border-slate-200 flex flex-wrap items-center justify-between gap-4">
                     <div>
                       <h3 className="text-base font-bold text-slate-900">{generatedKit?.position || 'Live Interview'}</h3>
@@ -1167,58 +1348,64 @@ Return ONLY a raw JSON object with zero markdown wrapper:
 
                   {generatedKit ? (
                     <div className="space-y-6">
-                      {generatedKit.questions.map((q, idx) => (
-                        <div key={q.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                          <div className="flex justify-between items-start">
-                            <span className="text-xs font-bold px-2.5 py-1 bg-slate-100 text-slate-700 rounded-md">Q{idx + 1} • {q.category}</span>
-                            <span className="text-xs text-slate-400">{q.purpose}</span>
-                          </div>
-                          <h3 className="text-base font-bold text-slate-900">{q.question}</h3>
+                      {generatedKit.questions.map((q, idx) => {
+                        const isReviewing = reviewingId === q.id;
+                        return (
+                          <div key={q.id} className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                            <div className="flex justify-between items-start">
+                              <span className="text-xs font-bold px-2.5 py-1 bg-slate-100 text-slate-700 rounded-md">Q{idx + 1} • {q.category}</span>
+                              <span className="text-xs text-slate-400">{q.purpose}</span>
+                            </div>
+                            <h3 className="text-base font-bold text-slate-900">{q.question}</h3>
 
-                          {/* Live Rubric Matrix Reference Drawer */}
-                          {q.rubricMatrix && (
-                            <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1">
-                              <span className="font-bold text-slate-700 block">Recommended Rubric Criteria Benchmarks:</span>
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                                <div className="p-2 bg-white rounded border border-rose-100"><strong className="text-rose-700 block">1 - Poor:</strong> {q.rubricMatrix[1]}</div>
-                                <div className="p-2 bg-white rounded border border-amber-100"><strong className="text-amber-700 block">3 - Meets:</strong> {q.rubricMatrix[3]}</div>
-                                <div className="p-2 bg-white rounded border border-emerald-100"><strong className="text-emerald-700 block">5 - Excellent:</strong> {q.rubricMatrix[5]}</div>
+                            {q.rubricMatrix && (
+                              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs space-y-1">
+                                <span className="font-bold text-slate-700 block">Recommended Rubric Criteria Benchmarks:</span>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                                  <div className="p-2 bg-white rounded border border-rose-100"><strong className="text-rose-700 block">1 - Poor:</strong> {q.rubricMatrix[1]}</div>
+                                  <div className="p-2 bg-white rounded border border-amber-100"><strong className="text-amber-700 block">3 - Meets:</strong> {q.rubricMatrix[3]}</div>
+                                  <div className="p-2 bg-white rounded border border-emerald-100"><strong className="text-emerald-700 block">5 - Excellent:</strong> {q.rubricMatrix[5]}</div>
+                                </div>
+                              </div>
+                            )}
+
+                            <div>
+                              <label className="block text-xs font-bold text-slate-700 mb-2">Score Candidate Response (1 to 5):</label>
+                              <div className="flex space-x-2">
+                                {[1, 2, 3, 4, 5].map(score => (
+                                  <button key={score} onClick={() => handleScoreChange(q.id, score)} className={`flex-1 py-2 rounded-xl font-bold text-xs transition ${candidateScores[q.id] === score ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>{score}</button>
+                                ))}
                               </div>
                             </div>
-                          )}
 
-                          <div>
-                            <label className="block text-xs font-bold text-slate-700 mb-2">Score Candidate Response (1 to 5):</label>
-                            <div className="flex space-x-2">
-                              {[1, 2, 3, 4, 5].map(score => (
-                                <button key={score} onClick={() => handleScoreChange(idx, score)} className={`flex-1 py-2 rounded-xl font-bold text-xs transition ${candidateScores[idx] === score ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>{score}</button>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div>
-                            <div className="flex justify-between items-center mb-1">
-                              <label className="block text-xs font-bold text-slate-700">Interviewer Notes & Answer Transcript:</label>
-                              <button onClick={() => handleReviewAnswerWithAI(idx)} disabled={reviewingIndex === idx} className="text-xs font-bold text-indigo-600 hover:text-indigo-800 disabled:text-slate-400">
-                                {reviewingIndex === idx ? 'Evaluating...' : 'AI Review Answer'}
-                              </button>
-                            </div>
-                            <textarea value={candidateNotes[idx] || ''} onChange={e => handleNoteChange(idx, e.target.value)} placeholder="Record candidate response notes here..." className="w-full p-3 text-xs border border-slate-200 rounded-xl bg-slate-50 h-24" />
-                          </div>
-
-                          {aiAnswerReviews[idx] && (
-                            <div className="bg-indigo-50/70 border border-indigo-100 p-4 rounded-xl text-xs space-y-2">
-                              <div className="flex justify-between font-bold text-indigo-900">
-                                <span>AI Analysis Feedback</span>
-                                <span>Suggested Score: {aiAnswerReviews[idx].suggestedScore} / 5</span>
+                            <div>
+                              <div className="flex justify-between items-center mb-1">
+                                <label className="block text-xs font-bold text-slate-700">Interviewer Notes & Answer Transcript:</label>
+                                <button
+                                  onClick={() => handleReviewAnswerWithAI(q.id)}
+                                  disabled={isReviewing}
+                                  className="text-xs font-bold text-indigo-600 hover:text-indigo-800 disabled:text-slate-400"
+                                >
+                                  {isReviewing ? 'Evaluating...' : 'AI Review Answer'}
+                                </button>
                               </div>
-                              <p><strong>Strengths:</strong> {aiAnswerReviews[idx].strengthsFound?.join('; ')}</p>
-                              <p><strong>Gaps:</strong> {aiAnswerReviews[idx].gapsFound?.join('; ')}</p>
-                              {aiAnswerReviews[idx].suggestedFollowUp && <p className="text-indigo-700 italic"><strong>Follow-Up Question:</strong> {aiAnswerReviews[idx].suggestedFollowUp}</p>}
+                              <textarea value={candidateNotes[q.id] || ''} onChange={e => handleNoteChange(q.id, e.target.value)} placeholder="Record candidate response notes here..." className="w-full p-3 text-xs border border-slate-200 rounded-xl bg-slate-50 h-24" />
                             </div>
-                          )}
-                        </div>
-                      ))}
+
+                            {aiAnswerReviews[q.id] && (
+                              <div className="bg-indigo-50/70 border border-indigo-100 p-4 rounded-xl text-xs space-y-2">
+                                <div className="flex justify-between font-bold text-indigo-900">
+                                  <span>AI Analysis Feedback</span>
+                                  <span>Suggested Score: {aiAnswerReviews[q.id].suggestedScore} / 5</span>
+                                </div>
+                                <p><strong>Strengths:</strong> {aiAnswerReviews[q.id].strengthsFound?.join('; ')}</p>
+                                <p><strong>Gaps:</strong> {aiAnswerReviews[q.id].gapsFound?.join('; ')}</p>
+                                {aiAnswerReviews[q.id].suggestedFollowUp && <p className="text-indigo-700 italic"><strong>Follow-Up Question:</strong> {aiAnswerReviews[q.id].suggestedFollowUp}</p>}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
 
                       <div className="flex justify-end">
                         <button onClick={() => setActiveTab('scorecard')} className="px-8 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg transition">View Candidate Scorecard →</button>
@@ -1230,7 +1417,6 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                 </div>
               )}
 
-              {/* CANDIDATE SCORECARD TAB */}
               {activeTab === 'scorecard' && (
                 <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-8 print-card">
                   <div className="border-b border-slate-200 pb-6 flex flex-wrap justify-between items-start gap-4">
@@ -1241,8 +1427,15 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                       </p>
                     </div>
                     <div className="text-right">
-                      <span className="text-4xl font-black text-indigo-600">{computeOverallStats.score100} / 100</span>
-                      <p className="text-xs font-bold text-slate-400">Overall Rating (Scale of 100)</p>
+                      {/* ✅ FIX: show em-dash instead of misleading "0 / 100" when unrated */}
+                      <span className="text-4xl font-black text-indigo-600">
+                        {computeOverallStats.count > 0 ? `${computeOverallStats.score100} / 100` : '— / 100'}
+                      </span>
+                      <p className="text-xs font-bold text-slate-400">
+                        {computeOverallStats.count > 0
+                          ? 'Overall Rating (Scale of 100)'
+                          : `No ratings yet (${Object.keys(candidateScores).length} scored)`}
+                      </p>
                     </div>
                   </div>
 
@@ -1252,12 +1445,18 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                       <h3 className="text-xl font-black text-indigo-950 mt-1">{computeOverallStats.recommendation}</h3>
                     </div>
                     <div className="flex space-x-3 no-print">
-                      <button onClick={handleSaveSessionToDashboard} className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow transition">Save to Dashboard Analytics</button>
+                      {/* ✅ FIX: disable after save, warn if no scores */}
+                      <button
+                        onClick={handleSaveSessionToDashboard}
+                        disabled={sessionSaved}
+                        className="px-4 py-2 bg-slate-900 hover:bg-slate-800 disabled:bg-emerald-700 disabled:cursor-default text-white text-xs font-bold rounded-xl shadow transition"
+                      >
+                        {sessionSaved ? '✓ Saved to Dashboard' : 'Save to Dashboard Analytics'}
+                      </button>
                       <button onClick={() => window.print()} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow transition">Print Candidate PDF</button>
                     </div>
                   </div>
 
-                  {/* Candidate Strengths Table */}
                   <div className="space-y-3">
                     <h4 className="font-bold text-emerald-900 text-sm">Top 3 Identified Candidate Strengths</h4>
                     <div className="overflow-x-auto border border-emerald-200 rounded-xl">
@@ -1290,7 +1489,6 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                     </div>
                   </div>
 
-                  {/* Areas for Improvement Table */}
                   <div className="space-y-3">
                     <h4 className="font-bold text-rose-900 text-sm">Top 3 Areas for Improvement</h4>
                     <div className="overflow-x-auto border border-rose-200 rounded-xl">
@@ -1325,7 +1523,6 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                 </div>
               )}
 
-              {/* ABOUT & MULTI-PROVIDER FREE API GUIDE TAB */}
               {activeTab === 'about' && (
                 <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm max-w-4xl mx-auto space-y-8">
                   <div>
@@ -1338,9 +1535,9 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                     <div className="space-y-4 text-xs text-slate-600 leading-relaxed">
                       <div className="bg-white p-4 rounded-xl border border-slate-200">
                         <strong className="text-indigo-600 block text-sm mb-1">1. Google AI Studio (Recommended — Free Tier)</strong>
-                        <p>Google provides a free tier for Gemini Flash models with up to 15 requests/minute.</p>
+                        <p>Google provides a free tier for Gemini Flash models with up to 15 requests/minute. Keys start with <code className="bg-slate-100 px-1 rounded">AIza</code>.</p>
                         <ul className="list-disc list-inside mt-2 space-y-1 text-slate-500">
-                          <li>Go to <a href="[https://aistudio.google.com/](https://aistudio.google.com/)" target="_blank" className="text-indigo-600 underline font-semibold">aistudio.google.com</a></li>
+                          <li>Go to <a href="https://aistudio.google.com/" target="_blank" rel="noreferrer" className="text-indigo-600 underline font-semibold">aistudio.google.com</a></li>
                           <li>Sign in with your Google account and click <strong>"Create API Key"</strong>.</li>
                           <li>Paste the key into InterviewMate's API Key modal.</li>
                         </ul>
@@ -1348,18 +1545,18 @@ Return ONLY a raw JSON object with zero markdown wrapper:
 
                       <div className="bg-white p-4 rounded-xl border border-slate-200">
                         <strong className="text-indigo-600 block text-sm mb-1">2. Groq Cloud (Free Developer Tier)</strong>
-                        <p>Groq provides free ultra-fast access to open models like Llama 3 and Mixtral.</p>
+                        <p>Groq provides free ultra-fast access to open models like Llama 3 and Mixtral. Keys start with <code className="bg-slate-100 px-1 rounded">gsk_</code>.</p>
                         <ul className="list-disc list-inside mt-2 space-y-1 text-slate-500">
-                          <li>Visit <a href="[https://console.groq.com/](https://console.groq.com/)" target="_blank" className="text-indigo-600 underline font-semibold">console.groq.com</a></li>
+                          <li>Visit <a href="https://console.groq.com/" target="_blank" rel="noreferrer" className="text-indigo-600 underline font-semibold">console.groq.com</a></li>
                           <li>Sign up for a free developer account and navigate to <strong>API Keys</strong>.</li>
                         </ul>
                       </div>
 
                       <div className="bg-white p-4 rounded-xl border border-slate-200">
                         <strong className="text-indigo-600 block text-sm mb-1">3. OpenRouter (Free & Open Weights Gateway)</strong>
-                        <p>OpenRouter offers access to free-tier open models with zero cost setups.</p>
+                        <p>OpenRouter offers access to free-tier open models with zero cost setups. Keys start with <code className="bg-slate-100 px-1 rounded">sk-or-</code>.</p>
                         <ul className="list-disc list-inside mt-2 space-y-1 text-slate-500">
-                          <li>Visit <a href="[https://openrouter.ai/](https://openrouter.ai/)" target="_blank" className="text-indigo-600 underline font-semibold">openrouter.ai</a></li>
+                          <li>Visit <a href="https://openrouter.ai/" target="_blank" rel="noreferrer" className="text-indigo-600 underline font-semibold">openrouter.ai</a></li>
                           <li>Create a key under Account Keys and filter by free model endpoints.</li>
                         </ul>
                       </div>
@@ -1371,7 +1568,6 @@ Return ONLY a raw JSON object with zero markdown wrapper:
             </main>
           </div>
 
-          {/* Persistent Footer with Wiggling Pretzel Cat Easter Egg */}
           <footer className="bg-slate-900 text-slate-400 border-t border-slate-800 py-6 px-6 text-center text-xs no-print">
             <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3">
               <p className="font-medium">InterviewMate — AI Question Generator & Candidate Evaluation Platform</p>
@@ -1381,30 +1577,29 @@ Return ONLY a raw JSON object with zero markdown wrapper:
             </div>
           </footer>
 
-          {/* Cat Easter Egg Modal */}
           {showCatModal && (
             <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
               <div className="bg-white max-w-sm w-full p-6 rounded-3xl shadow-2xl text-center space-y-4 relative">
                 <h3 className="text-lg font-black text-slate-900 flex items-center justify-center space-x-2">
                   <span>Pretzel Cat Power-Up!</span> <span>🥨🐱</span>
                 </h3>
-                
+
                 {isLoadingCat ? (
                   <div className="h-64 flex items-center justify-center text-indigo-600 font-bold text-sm">
                     Fetching cat boost...
                   </div>
                 ) : (
-                  <img 
-                    src={catImageUrl} 
-                    alt="Cute Cat Easter Egg" 
+                  <img
+                    src={catImageUrl}
+                    alt="Cute Cat Easter Egg"
                     className="w-full h-64 object-cover rounded-2xl shadow-md border border-slate-200"
                   />
                 )}
 
                 <p className="text-xs text-slate-500 italic">"May your interviews be smooth and stress-free!"</p>
 
-                <button 
-                  onClick={() => setShowCatModal(false)} 
+                <button
+                  onClick={() => setShowCatModal(false)}
                   className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded-xl shadow transition"
                 >
                   Back to Interviewing ✨
@@ -1413,7 +1608,6 @@ Return ONLY a raw JSON object with zero markdown wrapper:
             </div>
           )}
 
-          {/* Edit Preset Modal */}
           {editingPreset && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
               <div className="bg-white max-w-md w-full p-6 rounded-3xl shadow-2xl space-y-4">
@@ -1429,7 +1623,9 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                     const updated = presets.filter(p => p.id !== editingPreset.id);
                     const newPresets = [...updated, editingPreset];
                     setPresets(newPresets);
-                    localStorage.setItem('interviewmate_presets', JSON.stringify(newPresets));
+                    try {
+                      localStorage.setItem('interviewmate_presets', JSON.stringify(newPresets));
+                    } catch (e) { console.warn(e); }
                     setEditingPreset(null);
                   }} className="px-5 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl shadow">Save Preset</button>
                 </div>
@@ -1437,16 +1633,35 @@ Return ONLY a raw JSON object with zero markdown wrapper:
             </div>
           )}
 
-          {/* Multi-Provider API Key Modal */}
+          {/* ✅ FIX: multi-provider modal now includes a Clear button and updated hint text */}
           {showApiKeyModal && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
               <div className="bg-white max-w-md w-full p-6 rounded-3xl shadow-2xl space-y-4">
                 <h3 className="text-lg font-bold text-slate-900">Configure AI API Key</h3>
-                <p className="text-xs text-slate-500">Get free keys from <strong>Google AI Studio</strong> (aistudio.google.com), <strong>Groq</strong> (console.groq.com), or <strong>OpenRouter</strong> (openrouter.ai).</p>
-                <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder="API Key (e.g., AIzaSy... or gsk_...)" className="w-full p-3 border border-slate-300 rounded-xl text-sm font-mono bg-slate-50" />
-                <div className="flex justify-end space-x-3">
-                  <button onClick={() => setShowApiKeyModal(false)} className="px-4 py-2 text-xs font-bold text-slate-500">Cancel</button>
-                  <button onClick={() => { handleSaveApiKey(apiKey); setShowApiKeyModal(false); }} className="px-5 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl shadow">Save Key</button>
+                <p className="text-xs text-slate-500">
+                  Supported providers: <strong>Groq</strong> (<code>gsk_…</code>), <strong>OpenRouter</strong> (<code>sk-or-…</code>), <strong>OpenAI</strong> (<code>sk-…</code>), <strong>Google Gemini</strong> (<code>AIza…</code>).
+                </p>
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={e => setApiKey(e.target.value)}
+                  placeholder="Paste your API key here..."
+                  className="w-full p-3 border border-slate-300 rounded-xl text-sm font-mono bg-slate-50"
+                />
+                <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded-lg">
+                  ⚠️ Keys are stored in <code>localStorage</code> on this device only. Do not use shared machines.
+                </p>
+                <div className="flex justify-between items-center">
+                  <button
+                    onClick={() => { handleClearApiKey(); setShowApiKeyModal(false); }}
+                    className="px-3 py-2 text-xs font-bold text-rose-600 hover:text-rose-800"
+                  >
+                    Clear Key
+                  </button>
+                  <div className="flex space-x-3">
+                    <button onClick={() => setShowApiKeyModal(false)} className="px-4 py-2 text-xs font-bold text-slate-500">Cancel</button>
+                    <button onClick={() => { handleSaveApiKey(apiKey); setShowApiKeyModal(false); }} className="px-5 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl shadow">Save Key</button>
+                  </div>
                 </div>
               </div>
             </div>

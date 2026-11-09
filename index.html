@@ -21,7 +21,6 @@
         animation: pretzelWiggle 3s infinite ease-in-out;
         transform-origin: center;
       }
-      /* ✅ FIX: hide easter egg from printouts too */
       @media print {
         header, nav, button, footer, .no-print, .pretzel-anim { display: none !important; }
         body { background: white !important; color: black !important; }
@@ -135,11 +134,12 @@
       }
     };
 
-    // ✅ FIX: unique ID generator (avoids same-millisecond collisions)
+    // ------------------------------------------------------------------
+    // Utility helpers
+    // ------------------------------------------------------------------
     const uid = (prefix = 'q') =>
       `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
-    // ✅ FIX: safe localStorage parsing (no more white-screen crash on corrupted data)
     function safeParse(key, fallback) {
       try {
         const raw = localStorage.getItem(key);
@@ -150,7 +150,6 @@
       }
     }
 
-    // ✅ FIX: fetch wrapper that aborts hanging requests so UI never locks up
     function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -158,7 +157,6 @@
         .finally(() => clearTimeout(timer));
     }
 
-    // ✅ FIX: robust JSON extraction from LLM outputs (handles prose, fences, stray text)
     function extractJSON(text) {
       if (typeof text !== 'string' || !text.trim()) {
         throw new Error('AI provider returned an empty response.');
@@ -177,23 +175,59 @@
       }
     }
 
-    // ✅ FIX: multi-provider API client — explicit key detection, real Gemini model names,
-    //         proper errors for unsupported providers, timeouts on all requests.
-    async function callAIProvider(prompt, apiKey, systemInstruction = "You are an expert HR interviewer.") {
+    // ------------------------------------------------------------------
+    // Provider detection + multi-provider client
+    // ------------------------------------------------------------------
+    function detectProvider(key) {
+      const k = (key || '').trim();
+      if (!k) return 'unknown';
+      if (k.startsWith('gsk_')) return 'groq';
+      if (k.startsWith('sk-or-')) return 'openrouter';
+      if (k.startsWith('sk-ant-')) return 'anthropic';
+      if (k.startsWith('sk-')) return 'openai';
+      if (k.startsWith('AIza')) return 'gemini';
+      return 'custom';
+    }
+
+    const PROVIDER_PRESETS = {
+      groq:       { label: 'Groq',                       url: 'https://api.groq.com/openai/v1',  model: 'llama-3.3-70b-versatile' },
+      openrouter: { label: 'OpenRouter',                 url: 'https://openrouter.ai/api/v1',    model: 'meta-llama/llama-3.3-70b-instruct:free' },
+      openai:     { label: 'OpenAI',                     url: 'https://api.openai.com/v1',       model: 'gpt-4o-mini' },
+      anthropic:  { label: 'Anthropic (Claude)',         url: 'https://api.anthropic.com/v1',    model: 'claude-3-5-haiku-20241022' },
+      gemini:     { label: 'Google Gemini',              url: null,                              model: 'gemini-2.0-flash' },
+      custom:     { label: 'Custom OpenAI-compatible',   url: '',                                model: 'gpt-4o-mini' }
+    };
+
+    async function callAIProvider(
+      prompt,
+      apiKey,
+      systemInstruction = "You are an expert HR interviewer.",
+      providerOverride = 'auto',
+      customBaseUrl = '',
+      customModel = ''
+    ) {
       const key = (apiKey || '').trim();
-      if (!key) {
-        throw new Error("No API key provided. Click 'Set API Key' in the top right.");
-      }
+      if (!key) throw new Error("No API key provided. Click 'Set API Key' in the top right.");
 
       const system = `${systemInstruction} Respond with exactly one valid JSON object — no markdown fences, no prose, no explanation.`;
-      let textResult = '';
+      const provider = providerOverride && providerOverride !== 'auto' ? providerOverride : detectProvider(key);
 
-      if (key.startsWith('gsk_')) {
-        const res = await fetchWithTimeout("https://api.groq.com/openai/v1/chat/completions", {
+      if (provider === 'unknown') throw new Error("API key is empty.");
+
+      // ---------- OpenAI-compatible providers ----------
+      if (provider === 'groq' || provider === 'openrouter' || provider === 'openai' || provider === 'custom') {
+        const preset = PROVIDER_PRESETS[provider];
+        const baseUrl = (provider === 'custom' ? customBaseUrl : preset.url)?.trim().replace(/\/+$/, '');
+        const model   = (provider === 'custom' ? customModel : preset.model)?.trim() || preset.model;
+
+        if (!baseUrl) throw new Error("Custom endpoint requires a Base URL (e.g. https://api.yourprovider.com/v1).");
+        if (!model)   throw new Error("Custom endpoint requires a Model name (e.g. glm-4-flash, deepseek-chat, mistral-small-latest).");
+
+        const res = await fetchWithTimeout(`${baseUrl}/chat/completions`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
           body: JSON.stringify({
-            model: "llama-3.3-70b-versatile",
+            model,
             messages: [
               { role: "system", content: system },
               { role: "user", content: prompt }
@@ -201,60 +235,48 @@
             response_format: { type: "json_object" }
           })
         });
+
         if (!res.ok) {
-          const e = await res.json().catch(() => ({}));
-          throw new Error(`Groq API error (${res.status}): ${e.error?.message || res.statusText}`);
+          const errBody = await res.text().catch(() => '');
+          let msg = res.statusText;
+          try { msg = JSON.parse(errBody).error?.message || msg; } catch (_) { /* plain text */ }
+          throw new Error(`${preset.label} API error (${res.status}): ${msg || errBody.slice(0, 200)}`);
         }
         const data = await res.json();
-        textResult = data.choices?.[0]?.message?.content;
+        const text = data.choices?.[0]?.message?.content;
+        return extractJSON(text);
       }
-      else if (key.startsWith('sk-or-')) {
-        const res = await fetchWithTimeout("https://openrouter.ai/api/v1/chat/completions", {
+
+      // ---------- Anthropic ----------
+      if (provider === 'anthropic') {
+        const model = customModel?.trim() || PROVIDER_PRESETS.anthropic.model;
+        const res = await fetchWithTimeout("https://api.anthropic.com/v1/messages", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": key,
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true"
+          },
           body: JSON.stringify({
-            model: "meta-llama/llama-3.3-70b-instruct:free",
-            messages: [
-              { role: "system", content: system },
-              { role: "user", content: prompt }
-            ],
-            response_format: { type: "json_object" }
+            model,
+            max_tokens: 4096,
+            system,
+            messages: [{ role: "user", content: prompt }]
           })
         });
         if (!res.ok) {
-          const e = await res.json().catch(() => ({}));
-          throw new Error(`OpenRouter API error (${res.status}): ${e.error?.message || res.statusText}`);
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(`Anthropic API error (${res.status}): ${errData.error?.message || res.statusText}`);
         }
         const data = await res.json();
-        textResult = data.choices?.[0]?.message?.content;
+        const text = data.content?.find(b => b.type === 'text')?.text;
+        return extractJSON(text);
       }
-      // ✅ FIX: explicitly reject Anthropic keys instead of silently sending to the wrong provider
-      else if (key.startsWith('sk-ant-')) {
-        throw new Error("Anthropic (Claude) keys are not supported. Please use Groq, OpenRouter, OpenAI, or Google Gemini.");
-      }
-      else if (key.startsWith('sk-')) {
-        const res = await fetchWithTimeout("https://api.openai.com/v1/chat/completions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${key}` },
-          body: JSON.stringify({
-            model: "gpt-4o-mini",
-            messages: [
-              { role: "system", content: system },
-              { role: "user", content: prompt }
-            ],
-            response_format: { type: "json_object" }
-          })
-        });
-        if (!res.ok) {
-          const e = await res.json().catch(() => ({}));
-          throw new Error(`OpenAI API error (${res.status}): ${e.error?.message || res.statusText}`);
-        }
-        const data = await res.json();
-        textResult = data.choices?.[0]?.message?.content;
-      }
-      // ✅ FIX: real, currently-live Gemini model names
-      else if (key.startsWith('AIza')) {
-        const modelsToTry = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"];
+
+      // ---------- Gemini ----------
+      if (provider === 'gemini') {
+        const modelsToTry = [customModel?.trim(), "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"].filter(Boolean);
         let lastError = null;
         for (const model of modelsToTry) {
           try {
@@ -274,37 +296,36 @@
               throw new Error(`Gemini ${model} error (${res.status}): ${e.error?.message || res.statusText}`);
             }
             const data = await res.json();
-            textResult = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (textResult) break;
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) return extractJSON(text);
           } catch (err) {
             lastError = err;
           }
         }
-        if (!textResult) {
-          throw lastError || new Error("Failed to receive a response from Google Gemini API.");
-        }
-      }
-      // ✅ FIX: unknown key format = explicit error (was silently routed to Gemini)
-      else {
-        throw new Error("Unrecognized API key format. Supported prefixes: gsk_ (Groq), sk-or- (OpenRouter), sk- (OpenAI), AIza (Google Gemini).");
+        throw lastError || new Error("Failed to receive a response from Google Gemini API.");
       }
 
-      return extractJSON(textResult);
+      throw new Error(`Unsupported provider: ${provider}.`);
     }
 
+    // ------------------------------------------------------------------
+    // Main App
+    // ------------------------------------------------------------------
     function App() {
       const [activeTab, setActiveTab] = useState('dashboard');
       const [outputLang, setOutputLang] = useState('en');
       const [studioViewMode, setStudioViewMode] = useState('studio');
       const [cheatsheetDetail, setCheatsheetDetail] = useState('full');
 
-      // ✅ FIX: migrate legacy storage key + use safeParse
       const [apiKey, setApiKey] = useState(() => {
         const current = localStorage.getItem('interviewmate_api_key');
         if (current !== null) return current;
-        const legacy = localStorage.getItem('interviewmate_gemini_key');
-        return legacy || '';
+        return localStorage.getItem('interviewmate_gemini_key') || '';
       });
+      const [apiProvider, setApiProvider] = useState(() => localStorage.getItem('interviewmate_api_provider') || 'auto');
+      const [apiBaseUrl, setApiBaseUrl] = useState(() => localStorage.getItem('interviewmate_api_baseurl') || '');
+      const [apiModel, setApiModel] = useState(() => localStorage.getItem('interviewmate_api_model') || '');
+
       const [showApiKeyModal, setShowApiKeyModal] = useState(false);
       const [scrutinyMode, setScrutinyMode] = useState('balanced');
       const [copyStatus, setCopyStatus] = useState('');
@@ -312,7 +333,6 @@
       const [apiErrorMessage, setApiErrorMessage] = useState('');
       const [compositionWarning, setCompositionWarning] = useState('');
 
-      // Pretzel Cat Easter Egg State
       const [showCatModal, setShowCatModal] = useState(false);
       const [catImageUrl, setCatImageUrl] = useState('');
       const [isLoadingCat, setIsLoadingCat] = useState(false);
@@ -324,14 +344,8 @@
         time: new Date().toTimeString().slice(0, 5)
       });
 
-      // ✅ FIX: safeParse avoids crash on malformed storage
-      const [presets, setPresets] = useState(() =>
-        safeParse('interviewmate_presets', DEFAULT_PRESETS)
-      );
-      const [savedSessions, setSavedSessions] = useState(() =>
-        safeParse('interviewmate_sessions', DEFAULT_SESSIONS)
-      );
-
+      const [presets, setPresets] = useState(() => safeParse('interviewmate_presets', DEFAULT_PRESETS));
+      const [savedSessions, setSavedSessions] = useState(() => safeParse('interviewmate_sessions', DEFAULT_SESSIONS));
       const [editingPreset, setEditingPreset] = useState(null);
 
       const [config, setConfig] = useState({
@@ -351,27 +365,18 @@
       });
 
       const [generatedKit, setGeneratedKit] = useState(null);
-
-      // ✅ FIX: all per-question state is keyed by question id (not array index),
-      //         so deleting or regenerating a question never misaligns scores/notes.
       const [candidateScores, setCandidateScores] = useState({});
       const [candidateNotes, setCandidateNotes] = useState({});
       const [aiAnswerReviews, setAiAnswerReviews] = useState({});
-
-      // ✅ FIX: per-question loading state so we can disable the button that's mid-request
       const [reviewingId, setReviewingId] = useState(null);
       const [swappingId, setSwappingId] = useState(null);
-
       const [isGenerating, setIsGenerating] = useState(false);
-
-      // ✅ FIX: track "saved" state to prevent accidental double-save of the same session
       const [sessionSaved, setSessionSaved] = useState(false);
 
       const totalQuestionsCount = useMemo(() => {
         return Object.values(config.composition).reduce((a, b) => a + Number(b), 0);
       }, [config.composition]);
 
-      // ✅ FIX: working cat URLs — previous version had Markdown artifacts leaked into the fetch URL
       const handlePretzelClick = async () => {
         setShowCatModal(true);
         setIsLoadingCat(true);
@@ -411,8 +416,6 @@
         return { score100, count: scores.length, recommendation };
       }, [candidateScores, outputLang]);
 
-      // ✅ FIX: `?? 0` instead of `|| (s.avgScore * 20)` — the legacy field doesn't exist
-      //         and a legitimate score of 0 was being replaced with NaN.
       const dashboardStats = useMemo(() => {
         const totalInterviewed = savedSessions.length;
         const totalQuestions = savedSessions.reduce((sum, s) => sum + (s.questionCount || 5), 0);
@@ -421,10 +424,8 @@
           : 0;
 
         const positionsList = Array.from(new Set(savedSessions.map(s => s.position)));
-
         const competenciesSet = new Set();
         savedSessions.forEach(s => (s.competencies || ['Technical Depth', 'STAR Execution', 'Problem Solving']).forEach(c => competenciesSet.add(c)));
-
         const valuesSet = new Set();
         savedSessions.forEach(s => (s.companyValues || ['Execution Excellence', 'Integrity', 'Team Alignment']).forEach(v => valuesSet.add(v)));
 
@@ -438,7 +439,6 @@
         };
       }, [savedSessions]);
 
-      // ✅ FIX: warn when the 10-question cap silently clamps the user's input
       const handleCompositionChange = (type, val) => {
         const parsedVal = Math.max(0, parseInt(val) || 0);
         const currentOthersTotal = Object.entries(config.composition)
@@ -448,9 +448,7 @@
         const allowedVal = Math.max(0, Math.min(parsedVal, 10 - currentOthersTotal));
         setCompositionWarning('');
         if (parsedVal > allowedVal) {
-          setCompositionWarning(
-            `Total questions capped at 10. "${type}" reduced to ${allowedVal}.`
-          );
+          setCompositionWarning(`Total questions capped at 10. "${type}" reduced to ${allowedVal}.`);
           setTimeout(() => setCompositionWarning(''), 3500);
         }
         setConfig(prev => ({
@@ -459,11 +457,17 @@
         }));
       };
 
-      const handleSaveApiKey = (key) => {
+      const handleSaveApiKey = (key, provider, baseUrl, model) => {
         const trimmed = (key || '').trim();
         setApiKey(trimmed);
+        setApiProvider(provider || 'auto');
+        setApiBaseUrl(baseUrl || '');
+        setApiModel(model || '');
         try {
           localStorage.setItem('interviewmate_api_key', trimmed);
+          localStorage.setItem('interviewmate_api_provider', provider || 'auto');
+          localStorage.setItem('interviewmate_api_baseurl', baseUrl || '');
+          localStorage.setItem('interviewmate_api_model', model || '');
           localStorage.removeItem('interviewmate_gemini_key');
         } catch (e) {
           console.warn('Could not persist API key', e);
@@ -471,11 +475,16 @@
         setApiErrorMessage('');
       };
 
-      // ✅ FIX: dedicated clear so users aren't forced to overwrite a bad key
       const handleClearApiKey = () => {
         setApiKey('');
+        setApiProvider('auto');
+        setApiBaseUrl('');
+        setApiModel('');
         try {
           localStorage.removeItem('interviewmate_api_key');
+          localStorage.removeItem('interviewmate_api_provider');
+          localStorage.removeItem('interviewmate_api_baseurl');
+          localStorage.removeItem('interviewmate_api_model');
           localStorage.removeItem('interviewmate_gemini_key');
         } catch (e) { /* noop */ }
         setApiStatusMessage('');
@@ -492,15 +501,12 @@
         setSessionSaved(false);
       };
 
-      // ✅ FIX: functional setState keyed by id (was index-keyed, caused stale-closure races)
       const handleUpdateQuestion = (qId, field, value) => {
         setGeneratedKit(prev => {
           if (!prev) return prev;
           return {
             ...prev,
-            questions: prev.questions.map(q =>
-              q.id === qId ? { ...q, [field]: value } : q
-            )
+            questions: prev.questions.map(q => q.id === qId ? { ...q, [field]: value } : q)
           };
         });
       };
@@ -527,7 +533,6 @@
         setGeneratedKit(prev => ({ ...prev, questions: [...prev.questions, newQ] }));
       };
 
-      // ✅ FIX: clean up orphaned scores/notes when a question is deleted
       const handleDeleteQuestion = (qId) => {
         setGeneratedKit(prev => {
           if (!prev) return prev;
@@ -539,7 +544,6 @@
         setSessionSaved(false);
       };
 
-      // ✅ FIX: per-question loading state, functional updates, and normalised AI output
       const handleRegenerateSingleQuestion = async (qId) => {
         if (!generatedKit || swappingId === qId) return;
         const qToReplace = generatedKit.questions.find(q => q.id === qId);
@@ -561,7 +565,7 @@ Return ONLY raw JSON matching:
 
         try {
           if (apiKey && apiKey.trim()) {
-            const parsed = await callAIProvider(prompt, apiKey, "You are an expert HR interviewer.");
+            const parsed = await callAIProvider(prompt, apiKey, "You are an expert HR interviewer.", apiProvider, apiBaseUrl, apiModel);
             const normalised = {
               id: uid('q-regen'),
               category: parsed.category || qToReplace.category,
@@ -573,10 +577,8 @@ Return ONLY raw JSON matching:
             };
             setGeneratedKit(prev => {
               if (!prev) return prev;
-              const updated = prev.questions.map(q => q.id === qId ? normalised : q);
-              return { ...prev, questions: updated };
+              return { ...prev, questions: prev.questions.map(q => q.id === qId ? normalised : q) };
             });
-            // Transfer any existing score/notes to the new id
             setCandidateScores(prev => {
               if (prev[qId] === undefined) return prev;
               const n = { ...prev, [normalised.id]: prev[qId] };
@@ -598,7 +600,6 @@ Return ONLY raw JSON matching:
             return;
           }
 
-          // Offline fallback
           const offlineText = outputLang === 'id'
             ? `[Alternatif] Bagaimana Anda mengelola prioritas utama dalam peran ${generatedKit.position}?`
             : `[Alternative] How do you manage critical priorities in your role as ${generatedKit.position}?`;
@@ -607,9 +608,7 @@ Return ONLY raw JSON matching:
             if (!prev) return prev;
             return {
               ...prev,
-              questions: prev.questions.map(q =>
-                q.id === qId ? { ...q, id: newId, question: offlineText } : q
-              )
+              questions: prev.questions.map(q => q.id === qId ? { ...q, id: newId, question: offlineText } : q)
             };
           });
           setCandidateScores(prev => { const n = { ...prev }; delete n[qId]; return n; });
@@ -623,7 +622,6 @@ Return ONLY raw JSON matching:
         }
       };
 
-      // ✅ FIX: per-question loading state, functional updates, structured normalisation
       const handleReviewAnswerWithAI = async (qId) => {
         if (!generatedKit || reviewingId === qId) return;
         const note = candidateNotes[qId];
@@ -635,7 +633,6 @@ Return ONLY raw JSON matching:
         if (!questionObj) return;
 
         setReviewingId(qId);
-
         const targetLangStr = outputLang === 'id' ? 'Bahasa Indonesia' : 'English';
 
         const prompt = `You are an executive interviewer evaluating under Scrutiny Level: ${scrutinyMode}.
@@ -660,14 +657,13 @@ Analyze in ${targetLangStr}. Return ONLY raw JSON:
 
         try {
           if (apiKey && apiKey.trim()) {
-            const parsed = await callAIProvider(prompt, apiKey, "You are an executive interviewer.");
+            const parsed = await callAIProvider(prompt, apiKey, "You are an executive interviewer.", apiProvider, apiBaseUrl, apiModel);
             const cleaned = normalise(parsed);
             setAiAnswerReviews(prev => ({ ...prev, [qId]: cleaned }));
             handleScoreChange(qId, cleaned.suggestedScore);
             return;
           }
 
-          // Offline mock
           await new Promise(resolve => setTimeout(resolve, 800));
           const mockResult = normalise({
             suggestedScore: Math.min(5, Math.max(2, Math.floor(note.length / 25))),
@@ -691,7 +687,6 @@ Analyze in ${targetLangStr}. Return ONLY raw JSON:
 
         generatedKit.questions.forEach((q, idx) => {
           text += `Q${idx + 1} [${q.category}]: ${q.question}\n`;
-
           if (cheatsheetDetail !== 'only_questions') {
             text += `Purpose: ${q.purpose}\n`;
             text += `Recommended Rubric Matrix:\n`;
@@ -699,7 +694,6 @@ Analyze in ${targetLangStr}. Return ONLY raw JSON:
             text += `  [3 - Meets]: ${q.rubricMatrix?.[3] || 'Meets expectations'}\n`;
             text += `  [5 - Excellent]: ${q.rubricMatrix?.[5] || 'Exceptional mastery'}\n`;
           }
-
           if (cheatsheetDetail === 'full') {
             text += `Green Flags: ${q.greenFlags ? q.greenFlags.join('; ') : 'N/A'}\n`;
             text += `Red Flags: ${q.redFlags ? q.redFlags.join('; ') : 'N/A'}\n`;
@@ -714,7 +708,6 @@ Analyze in ${targetLangStr}. Return ONLY raw JSON:
 
         if (navigator.clipboard && window.isSecureContext) {
           navigator.clipboard.writeText(text).then(markCopied).catch(() => {
-            // ✅ FIX: fall through to legacy path if clipboard write fails
             const textArea = document.createElement('textarea');
             textArea.value = text;
             document.body.appendChild(textArea);
@@ -734,7 +727,6 @@ Analyze in ${targetLangStr}. Return ONLY raw JSON:
         }
       };
 
-      // ✅ FIX: block saving empty sessions; mark the button as saved to prevent duplicates
       const handleSaveSessionToDashboard = () => {
         if (!generatedKit) return;
         if (computeOverallStats.count === 0) {
@@ -766,7 +758,6 @@ Analyze in ${targetLangStr}. Return ONLY raw JSON:
         alert('Candidate evaluation session saved to dashboard analytics!');
       };
 
-      // ✅ FIX: try/finally so `isGenerating` can never get stuck; offline path keeps spinner alive
       const generateInterviewQuestions = async () => {
         setIsGenerating(true);
         setApiErrorMessage('');
@@ -822,11 +813,10 @@ Return ONLY a raw JSON object with zero markdown wrapper:
         if (apiKey && apiKey.trim()) {
           try {
             setApiStatusMessage('Connecting to AI API provider...');
-            const parsed = await callAIProvider(prompt, apiKey, "You are an expert HR interviewer.");
+            const parsed = await callAIProvider(prompt, apiKey, "You are an expert HR interviewer.", apiProvider, apiBaseUrl, apiModel);
             if (!parsed.questions || !Array.isArray(parsed.questions) || parsed.questions.length === 0) {
               throw new Error("Invalid structure: 'questions' array missing or empty in AI response.");
             }
-            // Ensure every question gets a stable unique id
             const questions = parsed.questions.slice(0, 10).map((q, i) => ({
               ...q,
               id: q.id || uid(`q-${i + 1}`),
@@ -846,7 +836,6 @@ Return ONLY a raw JSON object with zero markdown wrapper:
           return;
         }
 
-        // Offline fallback — keep spinner visible during the simulated work
         setApiStatusMessage('No API Key set. Using built-in offline question generator.');
         setTimeout(() => {
           try {
@@ -893,7 +882,6 @@ Return ONLY a raw JSON object with zero markdown wrapper:
       return (
         <div className="min-h-screen flex flex-col justify-between">
           <div>
-            {/* Header Bar */}
             <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40 shadow-md">
               <div className="max-w-7xl mx-auto px-6 py-3.5 flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center space-x-3 cursor-pointer" onClick={() => setActiveTab('dashboard')}>
@@ -985,7 +973,6 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                               <td className="p-3 text-indigo-600 font-semibold">{s.position}</td>
                               <td className="p-3 text-slate-600">{s.interviewerName}</td>
                               <td className="p-3 text-slate-500">{s.date} @ {s.time}</td>
-                              {/* ✅ FIX: no more NaN from dead avgScore fallback */}
                               <td className="p-3 font-black text-emerald-600">{Number(s.score100 ?? 0)} / 100</td>
                             </tr>
                           ))}
@@ -1016,7 +1003,6 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                     </div>
                   )}
 
-                  {/* ✅ FIX: visible feedback when the 10-question cap silently clamps input */}
                   {compositionWarning && (
                     <div className="bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-2xl text-xs font-medium">
                       ⚠️ {compositionWarning}
@@ -1157,7 +1143,6 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                                   className="text-xs font-bold px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-md border border-indigo-100"
                                 />
                                 <div className="flex items-center space-x-2">
-                                  {/* ✅ FIX: button disabled while its own swap request is in flight */}
                                   <button
                                     onClick={() => handleRegenerateSingleQuestion(q.id)}
                                     disabled={isSwapping}
@@ -1427,7 +1412,6 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                       </p>
                     </div>
                     <div className="text-right">
-                      {/* ✅ FIX: show em-dash instead of misleading "0 / 100" when unrated */}
                       <span className="text-4xl font-black text-indigo-600">
                         {computeOverallStats.count > 0 ? `${computeOverallStats.score100} / 100` : '— / 100'}
                       </span>
@@ -1445,7 +1429,6 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                       <h3 className="text-xl font-black text-indigo-950 mt-1">{computeOverallStats.recommendation}</h3>
                     </div>
                     <div className="flex space-x-3 no-print">
-                      {/* ✅ FIX: disable after save, warn if no scores */}
                       <button
                         onClick={handleSaveSessionToDashboard}
                         disabled={sessionSaved}
@@ -1545,20 +1528,25 @@ Return ONLY a raw JSON object with zero markdown wrapper:
 
                       <div className="bg-white p-4 rounded-xl border border-slate-200">
                         <strong className="text-indigo-600 block text-sm mb-1">2. Groq Cloud (Free Developer Tier)</strong>
-                        <p>Groq provides free ultra-fast access to open models like Llama 3 and Mixtral. Keys start with <code className="bg-slate-100 px-1 rounded">gsk_</code>.</p>
+                        <p>Groq provides free ultra-fast access to open models. Keys start with <code className="bg-slate-100 px-1 rounded">gsk_</code>.</p>
                         <ul className="list-disc list-inside mt-2 space-y-1 text-slate-500">
                           <li>Visit <a href="https://console.groq.com/" target="_blank" rel="noreferrer" className="text-indigo-600 underline font-semibold">console.groq.com</a></li>
-                          <li>Sign up for a free developer account and navigate to <strong>API Keys</strong>.</li>
+                          <li>Sign up and navigate to <strong>API Keys</strong>.</li>
                         </ul>
                       </div>
 
                       <div className="bg-white p-4 rounded-xl border border-slate-200">
                         <strong className="text-indigo-600 block text-sm mb-1">3. OpenRouter (Free & Open Weights Gateway)</strong>
-                        <p>OpenRouter offers access to free-tier open models with zero cost setups. Keys start with <code className="bg-slate-100 px-1 rounded">sk-or-</code>.</p>
+                        <p>OpenRouter offers free-tier open models. Keys start with <code className="bg-slate-100 px-1 rounded">sk-or-</code>.</p>
                         <ul className="list-disc list-inside mt-2 space-y-1 text-slate-500">
                           <li>Visit <a href="https://openrouter.ai/" target="_blank" rel="noreferrer" className="text-indigo-600 underline font-semibold">openrouter.ai</a></li>
-                          <li>Create a key under Account Keys and filter by free model endpoints.</li>
+                          <li>Create a key under Account Keys.</li>
                         </ul>
+                      </div>
+
+                      <div className="bg-white p-4 rounded-xl border border-slate-200">
+                        <strong className="text-indigo-600 block text-sm mb-1">4. Any other provider (Zhipu, DeepSeek, Mistral, Together, etc.)</strong>
+                        <p>If your key doesn't start with <code>gsk_</code>, <code>sk-or-</code>, <code>sk-</code>, or <code>AIza</code>, choose <strong>"Custom OpenAI-compatible"</strong> in the API modal and fill in the Base URL + Model name.</p>
                       </div>
                     </div>
                   </div>
@@ -1623,9 +1611,7 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                     const updated = presets.filter(p => p.id !== editingPreset.id);
                     const newPresets = [...updated, editingPreset];
                     setPresets(newPresets);
-                    try {
-                      localStorage.setItem('interviewmate_presets', JSON.stringify(newPresets));
-                    } catch (e) { console.warn(e); }
+                    try { localStorage.setItem('interviewmate_presets', JSON.stringify(newPresets)); } catch (e) { console.warn(e); }
                     setEditingPreset(null);
                   }} className="px-5 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl shadow">Save Preset</button>
                 </div>
@@ -1633,25 +1619,90 @@ Return ONLY a raw JSON object with zero markdown wrapper:
             </div>
           )}
 
-          {/* ✅ FIX: multi-provider modal now includes a Clear button and updated hint text */}
           {showApiKeyModal && (
             <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-              <div className="bg-white max-w-md w-full p-6 rounded-3xl shadow-2xl space-y-4">
-                <h3 className="text-lg font-bold text-slate-900">Configure AI API Key</h3>
-                <p className="text-xs text-slate-500">
-                  Supported providers: <strong>Groq</strong> (<code>gsk_…</code>), <strong>OpenRouter</strong> (<code>sk-or-…</code>), <strong>OpenAI</strong> (<code>sk-…</code>), <strong>Google Gemini</strong> (<code>AIza…</code>).
-                </p>
-                <input
-                  type="password"
-                  value={apiKey}
-                  onChange={e => setApiKey(e.target.value)}
-                  placeholder="Paste your API key here..."
-                  className="w-full p-3 border border-slate-300 rounded-xl text-sm font-mono bg-slate-50"
-                />
+              <div className="bg-white max-w-lg w-full p-6 rounded-3xl shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+
+                <div>
+                  <h3 className="text-lg font-bold text-slate-900">Configure AI API Key</h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Supports Groq, OpenRouter, OpenAI, Anthropic, Google Gemini, and <strong>any OpenAI-compatible endpoint</strong>.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Provider</label>
+                  <select
+                    value={apiProvider}
+                    onChange={e => setApiProvider(e.target.value)}
+                    className="w-full p-3 border border-slate-300 rounded-xl text-sm bg-white font-medium"
+                  >
+                    <option value="auto">Auto-detect from key</option>
+                    <option value="groq">Groq (gsk_…)</option>
+                    <option value="openrouter">OpenRouter (sk-or-…)</option>
+                    <option value="openai">OpenAI (sk-…)</option>
+                    <option value="anthropic">Anthropic Claude (sk-ant-…)</option>
+                    <option value="gemini">Google Gemini (AIza…)</option>
+                    <option value="custom">Custom OpenAI-compatible (any key format)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">API Key</label>
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={e => setApiKey(e.target.value)}
+                    placeholder="Paste your API key here..."
+                    className="w-full p-3 border border-slate-300 rounded-xl text-sm font-mono bg-slate-50"
+                  />
+                  {apiKey && (
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Detected format: <strong>{detectProvider(apiKey)}</strong>
+                      {apiProvider === 'auto' && detectProvider(apiKey) === 'custom' && (
+                        <span className="text-amber-700"> — unrecognized prefix; select <em>Custom OpenAI-compatible</em> below.</span>
+                      )}
+                    </p>
+                  )}
+                </div>
+
+                {apiProvider === 'custom' && (
+                  <div className="space-y-3 bg-indigo-50/60 border border-indigo-100 p-4 rounded-xl">
+                    <div>
+                      <label className="block text-xs font-bold text-indigo-900 mb-1">Base URL</label>
+                      <input
+                        type="text"
+                        value={apiBaseUrl}
+                        onChange={e => setApiBaseUrl(e.target.value)}
+                        placeholder="e.g. https://open.bigmodel.cn/api/paas/v4"
+                        className="w-full p-2.5 border border-indigo-200 rounded-lg text-sm font-mono bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-indigo-900 mb-1">Model Name</label>
+                      <input
+                        type="text"
+                        value={apiModel}
+                        onChange={e => setApiModel(e.target.value)}
+                        placeholder="e.g. glm-4-flash, deepseek-chat, mistral-small-latest"
+                        className="w-full p-2.5 border border-indigo-200 rounded-lg text-sm font-mono bg-white"
+                      />
+                    </div>
+                    <p className="text-[11px] text-indigo-700 leading-snug">
+                      Find your provider's <strong>"OpenAI-compatible"</strong> endpoint. Common examples:
+                      <br />• <strong>Zhipu:</strong> <code>https://open.bigmodel.cn/api/paas/v4</code> + <code>glm-4-flash</code>
+                      <br />• <strong>DeepSeek:</strong> <code>https://api.deepseek.com/v1</code> + <code>deepseek-chat</code>
+                      <br />• <strong>Mistral:</strong> <code>https://api.mistral.ai/v1</code> + <code>mistral-small-latest</code>
+                      <br />• <strong>Together:</strong> <code>https://api.together.xyz/v1</code> + <code>meta-llama/Llama-3.3-70B-Instruct-Turbo</code>
+                    </p>
+                  </div>
+                )}
+
                 <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 p-2 rounded-lg">
-                  ⚠️ Keys are stored in <code>localStorage</code> on this device only. Do not use shared machines.
+                  ⚠️ Key is stored in <code>localStorage</code> on this device only. Do not use shared machines.
                 </p>
-                <div className="flex justify-between items-center">
+
+                <div className="flex justify-between items-center pt-2">
                   <button
                     onClick={() => { handleClearApiKey(); setShowApiKeyModal(false); }}
                     className="px-3 py-2 text-xs font-bold text-rose-600 hover:text-rose-800"
@@ -1660,7 +1711,12 @@ Return ONLY a raw JSON object with zero markdown wrapper:
                   </button>
                   <div className="flex space-x-3">
                     <button onClick={() => setShowApiKeyModal(false)} className="px-4 py-2 text-xs font-bold text-slate-500">Cancel</button>
-                    <button onClick={() => { handleSaveApiKey(apiKey); setShowApiKeyModal(false); }} className="px-5 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl shadow">Save Key</button>
+                    <button
+                      onClick={() => { handleSaveApiKey(apiKey, apiProvider, apiBaseUrl, apiModel); setShowApiKeyModal(false); }}
+                      className="px-5 py-2 bg-indigo-600 text-white text-xs font-bold rounded-xl shadow"
+                    >
+                      Save Key
+                    </button>
                   </div>
                 </div>
               </div>

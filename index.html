@@ -276,7 +276,12 @@
 
       // ---------- Gemini ----------
       if (provider === 'gemini') {
-        const modelsToTry = [customModel?.trim(), "gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-8b"].filter(Boolean);
+        const modelsToTry = [
+  customModel?.trim(),
+  "gemini-2.5-flash",        // ✅ Current stable model
+  "gemini-2.5-flash-lite",   // ✅ Fast, budget-friendly
+  "gemini-3.8-flash"         // ✅ Latest Flash model
+].filter(Boolean);
         let lastError = null;
         for (const model of modelsToTry) {
           try {
